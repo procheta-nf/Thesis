@@ -1,0 +1,3634 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Wala-Mujib Digital Twin</title>
+
+  <!-- prevent favicon 404 spam in devtools -->
+  <link rel="icon" href="data:,">
+
+  <script src="https://cesium.com/downloads/cesiumjs/releases/1.114/Build/Cesium/Cesium.js"></script>
+  <link href="https://cesium.com/downloads/cesiumjs/releases/1.114/Build/Cesium/Widgets/widgets.css" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
+
+  <!-- Used only to auto-fix CRS mistakes (UTM -> WGS84) if any GeoJSON was exported in a projected CRS -->
+  <script src="https://cdn.jsdelivr.net/npm/proj4@2.9.2/dist/proj4.min.js"></script>
+
+  <style>
+    * { box-sizing: border-box; }
+
+    body { margin: 0; overflow: hidden; font-family: 'Roboto','Segoe UI',sans-serif; background:#0b0c10; }
+
+    #sidebar{
+      position:absolute; top:0; left:0; width:380px; height:100vh;
+      background:#1f2833; color:#c5c6c7; z-index:10;
+      box-shadow:4px 0 10px rgba(0,0,0,0.5); display:flex; flex-direction:column;
+    }
+
+    #header{ padding:20px; background:#0b0c10; border-bottom:2px solid #66fcf1; }
+    h1{ margin:0; color:#66fcf1; font-size:22px; letter-spacing:1px; }
+    h2{ margin:5px 0 0; font-size:14px; color:#888; font-weight:normal; }
+
+    #statusLine{
+      margin-top:10px; padding:8px 10px; border:1px solid rgba(102,252,241,0.35);
+      border-radius:6px; background:rgba(31,40,51,0.6);
+      font-size:12px; color:#c5c6c7; line-height:1.4;
+    }
+    .ok{ color:#66fcf1; }
+    .warn{ color:#ffcc80; }
+    .bad{ color:#ff8a80; }
+
+    .catalogue-container{ flex:1; overflow-y:auto; padding:10px; }
+
+    .category-btn{
+      background:#45a29e; color:white; cursor:pointer; padding:12px; width:100%;
+      text-align:left; border:none; outline:none; transition:0.4s;
+      font-weight:bold; margin-top:5px; border-radius:4px; display:flex; justify-content:space-between;
+    }
+    .category-btn:after{ content:'+'; font-weight:bold; float:right; }
+    .category-btn.active{ background:#66fcf1; color:#0b0c10; }
+    .category-btn.active:after{ content:'-'; }
+
+    .analysis-btn{
+      background:#1f4068; border:1px solid #66fcf1; color:#66fcf1;
+      margin-top:15px; text-align:center; justify-content:center; transition:0.3s;
+    }
+    .analysis-btn:hover{ background:#66fcf1; color:#0b0c10; cursor:pointer; }
+    .analysis-btn:after{ content:''; }
+
+    .layer-panel{
+      padding:0 10px; background:#28303b; max-height:0; overflow:hidden;
+      transition:max-height 0.2s ease-out; margin-bottom:5px; border-radius:0 0 4px 4px;
+    }
+
+    .layer-item{
+      display:flex; align-items:center; justify-content:space-between;
+      padding:12px 0; border-bottom:1px solid #333; font-size:13px;
+    }
+    .layer-info{ display:flex; align-items:center; gap:10px; }
+
+    .icon-box{ width:12px; height:12px; border:1px solid #fff; display:inline-block; }
+    .icon-line{ width:20px; height:3px; display:inline-block; }
+    .icon-dot{ width:10px; height:10px; border-radius:50%; display:inline-block; }
+    input[type=checkbox]{ transform:scale(1.2); cursor:pointer; accent-color:#66fcf1; }
+
+    /* ===== Chart panel layout (fixed) ===== */
+    #chartPanel{
+      height:360px;
+      background:#0b0c10;
+      border-top:2px solid #45a29e;
+      padding:10px;
+      display:none;
+      position:relative;
+
+      overflow-y:auto;      /*  allow scroll */
+      overflow-x:hidden;
+      scroll-behavior:smooth;
+    }
+
+    #chartHeader{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      flex-wrap:wrap;
+      padding-bottom:10px;
+      border-bottom:1px solid rgba(255,255,255,0.08);
+      margin-bottom:10px;
+    }
+
+    #controlsRow{
+      display:flex;
+      gap:8px;
+      align-items:center;
+      flex: 1 1 auto;
+      flex-wrap:wrap;
+      min-width:0;
+    }
+
+    select.dtSelect{
+      padding:8px;
+      background:#1f2833;
+      color:white;
+      border:1px solid #45a29e;
+      border-radius:6px;
+      font-weight:bold;
+      flex: 1 1 140px;
+      min-width:140px;
+      max-width:100%;
+    }
+
+    #closeChartBtn{
+      padding:8px 12px;
+      border-radius:6px;
+      border:1px solid rgba(255,255,255,0.25);
+      background:#222;
+      color:#fff;
+      cursor:pointer;
+      font-weight:bold;
+      flex:0 0 auto;
+      white-space:nowrap;
+    }
+    #closeChartBtn:hover{ background:#333; }
+
+    #swatChart{
+      width:100% !important;
+      height: calc(360px - 10px - 10px - 62px) !important;
+    }
+
+    
+
+
+    /* ===== Chart tabs (Hydrology / Climate) ===== */
+    #chartTabs{
+      display:flex;
+      gap:8px;
+      margin:6px 0 10px;
+    }
+    .chartTabBtn{
+      flex:1 1 auto;
+      padding:8px 10px;
+      border-radius:10px;
+      border:1px solid rgba(102,252,241,0.35);
+      background: rgba(31,40,51,0.55);
+      color:#c5c6c7;
+      cursor:pointer;
+      font-weight:800;
+      font-size:12px;
+      letter-spacing:0.02em;
+      user-select:none;
+    }
+    .chartTabBtn:hover{ background: rgba(255,255,255,0.06); }
+    .chartTabBtn.active{
+      background: rgba(102,252,241,0.15);
+      color:#66fcf1;
+      border-color: rgba(102,252,241,0.65);
+    }
+    .chartTabPane{ width:100%; }
+    #hydrologyNotice{
+      margin:8px 0;
+      padding:10px;
+      border-radius:10px;
+      border:1px solid rgba(255,255,255,0.08);
+      background: rgba(31,40,51,0.35);
+      color:#ffcc80;
+      font-size:12px;
+      line-height:1.35;
+      display:none;
+    }
+    #climateHeader{
+      padding:10px;
+      border:1px solid rgba(255,255,255,0.08);
+      border-radius:10px;
+      background: rgba(31,40,51,0.35);
+    }
+    #climateTitle{
+      font-weight:900;
+      color:#66fcf1;
+      font-size:12px;
+      letter-spacing:0.04em;
+      text-transform:uppercase;
+    }
+    #climateStatus{
+      margin-top:6px;
+      font-size:12px;
+      color:#c5c6c7;
+      line-height:1.35;
+      word-break:break-word;
+    }
+    .climatePills{ display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+    .climatePill{
+      font-size:11px;
+      padding:4px 8px;
+      border-radius:999px;
+      border:1px solid rgba(102,252,241,0.28);
+      background: rgba(0,0,0,0.18);
+      color:#e6e6e6;
+      white-space:nowrap;
+    }
+    #climateChart{
+      width:100% !important;
+      height:260px !important;
+    }
+
+#legendPanel{
+      position:absolute; bottom:30px; right:30px; width:300px;
+      background:rgba(11,12,16,0.85); padding:15px; border-radius:8px;
+      color:white; display:none; z-index:50; border:1px solid #66fcf1;
+      font-family:sans-serif;
+    }
+    .gradient-bar{
+      height:15px; width:100%; margin:8px 0; border-radius:3px;
+      background:linear-gradient(to right, #ccc, #81D4FA, #29B6F6, #0277BD, #0D47A1);
+    }
+    .legend-labels{ display:flex; justify-content:space-between; font-size:11px; color:#ccc; }
+
+    /* ===== Right-side asset details panel ===== */
+    #assetPanel{
+      position:absolute;
+      top:20px;
+      right:20px;
+      width:360px;
+      max-width: calc(100% - 420px); /* keep clear of left sidebar */
+      max-height: calc(100vh - 40px);
+      background: rgba(11,12,16,0.92);
+      border:1px solid rgba(102,252,241,0.55);
+      border-radius:12px;
+      box-shadow:0 10px 30px rgba(0,0,0,0.55);
+      color:#e6e6e6;
+      z-index:80;
+      display:none;
+      overflow:hidden;
+      backdrop-filter: blur(6px);
+    }
+    #assetPanelHeader{
+      display:flex;
+      align-items:flex-start;
+      justify-content:space-between;
+      gap:10px;
+      padding:12px 12px 10px 12px;
+      border-bottom:1px solid rgba(255,255,255,0.08);
+      background: rgba(31,40,51,0.55);
+    }
+    #assetPanelTitle{
+      font-weight:800;
+      color:#66fcf1;
+      font-size:14px;
+      line-height:1.25;
+      word-break:break-word;
+    }
+    #assetPanelSubtitle{
+      margin-top:4px;
+      font-size:12px;
+      color:#aab;
+      line-height:1.25;
+      word-break:break-word;
+    }
+    #assetPanelClose{
+      border:1px solid rgba(255,255,255,0.25);
+      background: rgba(0,0,0,0.25);
+      color:#fff;
+      border-radius:8px;
+      padding:6px 10px;
+      cursor:pointer;
+      font-weight:bold;
+      flex:0 0 auto;
+    }
+    #assetPanelClose:hover{ background: rgba(255,255,255,0.08); }
+
+    #assetPanelBody{
+      padding:12px;
+      overflow:auto;
+      max-height: calc(100vh - 40px - 56px);
+    }
+    .assetBadges{ display:flex; flex-wrap:wrap; gap:8px; margin:10px 0 12px; }
+    .assetBadge{
+      font-size:11px; padding:5px 8px; border-radius:999px;
+      border:1px solid rgba(102,252,241,0.35);
+      background: rgba(31,40,51,0.55);
+      color:#cfe;
+      white-space:nowrap;
+    }
+    .assetActions{ display:flex; gap:8px; flex-wrap:wrap; margin:0 0 12px; }
+    .assetBtn{
+      padding:8px 10px;
+      border-radius:8px;
+      border:1px solid rgba(102,252,241,0.45);
+      background: rgba(69,162,158,0.15);
+      color:#66fcf1;
+      cursor:pointer;
+      font-weight:700;
+      font-size:12px;
+    }
+    .assetBtn:hover{ background: rgba(102,252,241,0.18); }
+    .kvGrid{ display:grid; grid-template-columns: 1fr 1fr; gap:8px 10px; }
+    .kv{
+      background: rgba(31,40,51,0.45);
+      border:1px solid rgba(255,255,255,0.06);
+      border-radius:10px;
+      padding:10px;
+      min-width:0;
+    }
+    .kv .k{ font-size:11px; color:#9aa; margin-bottom:4px; }
+    .kv .v{ font-size:13px; color:#fff; word-break:break-word; }
+    .assetSectionTitle{
+      margin:14px 0 8px;
+      font-size:12px;
+      color:#c5c6c7;
+      text-transform:uppercase;
+      letter-spacing:0.08em;
+    }
+    details.assetDetails{
+      margin-top:12px;
+      background: rgba(31,40,51,0.35);
+      border:1px solid rgba(255,255,255,0.06);
+      border-radius:10px;
+      padding:8px 10px;
+    }
+    details.assetDetails summary{
+      cursor:pointer;
+      color:#66fcf1;
+      font-weight:700;
+      font-size:12px;
+      outline:none;
+    }
+    pre.assetJson{
+      white-space:pre-wrap;
+      word-break:break-word;
+      font-size:11px;
+      color:#ddd;
+      margin:10px 0 0;
+    }
+    @media (max-width: 1100px){
+      #assetPanel{ width: 320px; }
+    }
+
+    #cesiumContainer{ width:100%; height:100vh; margin-left:380px; width:calc(100% - 380px); }
+  
+    /* ============================
+       Climate chart: expand + modal
+       ============================ */
+    #climateHeader { position: relative; }
+    .miniActionBtn{
+      position: relative;
+      border: 1px solid rgba(255,255,255,0.18);
+      background: rgba(17, 24, 39, 0.55);
+      color: #c5c6c7;
+      padding: 6px 10px;
+      border-radius: 10px;
+      font-size: 12px;
+      cursor: pointer;
+      transition: transform 120ms ease, background 120ms ease, border-color 120ms ease;
+      user-select: none;
+      white-space: nowrap;
+    }
+    .miniActionBtn:hover{ background: rgba(17, 24, 39, 0.72); border-color: rgba(102,252,241,0.35); transform: translateY(-1px); }
+    .miniActionBtn:active{ transform: translateY(0px); }
+    #climateExpandBtn{
+      position:absolute;
+      top: 10px;
+      right: 10px;
+    }
+    #simRainBtn{
+      position:absolute;
+      top: 10px;
+      right: 110px;
+    }
+    #simRainBtn.active{
+      border-color: rgba(255,204,128,0.75);
+      background: rgba(255,204,128,0.10);
+      color: #ffcc80;
+    }
+
+    .modalOverlay{
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.72);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+      padding: 18px;
+    }
+    .modalCard{
+      width: min(1100px, 96vw);
+      height: min(720px, 86vh);
+      background: rgba(11, 14, 18, 0.98);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 18px;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.6);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .modalHeader{
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 14px;
+      border-bottom: 1px solid rgba(255,255,255,0.10);
+    }
+    .modalTitle{
+      font-weight: 600;
+      color: #e5e7eb;
+      font-size: 14px;
+      letter-spacing: 0.2px;
+    }
+    .modalActions{ display:flex; gap:10px; align-items:center; }
+    .modalBody{
+      position: relative;
+      flex: 1;
+      padding: 10px 14px 6px 14px;
+    }
+    #climateChartBig{
+      width: 100% !important;
+      height: 100% !important;
+    }
+    .modalHint{
+      padding: 10px 14px 14px 14px;
+      font-size: 12px;
+      color: #9aa;
+      border-top: 1px solid rgba(255,255,255,0.08);
+    }
+
+  </style>
+</head>
+
+<body>
+  <div id="sidebar">
+    <div id="header">
+      <h1>Wala-Mujib Twin</h1>
+      <h2>Eco-Hydrological Decision Support</h2>
+      <div id="statusLine">
+        <div>Subbasins layer: <span id="subStatus" class="warn">loading…</span></div>
+        <div>Scenarios JSON: <span id="jsonStatus" class="warn">loading…</span></div>
+        <div>Hover: <span id="hoverStatus" class="warn">none</span></div>
+        <div>Click: <span id="clickStatus" class="warn">none</span></div>
+      </div>
+    </div>
+
+    <div class="catalogue-container">
+      <button class="category-btn active">🌊 Water Resources</button>
+      <div class="layer-panel" style="max-height: 580px;">
+        <div class="layer-item">
+          <div class="layer-info">
+            <div class="icon-box" style="border:1px dashed gold;"></div>
+            SWAT Sub-Basins (71) (Clickable)
+          </div>
+          <input id="swatSubChk" type="checkbox" checked onchange="toggleSubbasinMode('swat', this.checked)">
+        </div>
+
+        <div class="layer-item">
+          <div class="layer-info">
+            <div class="icon-box" style="border:1px solid #ffb74d;"></div>
+            All Sub-Basins (429)
+          </div>
+          <input id="allSubChk" type="checkbox" onchange="toggleSubbasinMode('all', this.checked)">
+        </div>
+
+        <div class="layer-item">
+          <div class="layer-info"><div class="icon-box" style="border-color:orange;"></div> Basin Boundary</div>
+          <input type="checkbox" checked onchange="toggleLayer('basin', this.checked)">
+        </div>
+
+        <div class="layer-item">
+          <div class="layer-info"><div class="icon-line" style="background:#00E5FF;"></div> River Network</div>
+          <input type="checkbox" checked onchange="toggleLayer('rivers', this.checked)">
+        </div>
+        <div class="layer-item">
+          <div class="layer-info"><div class="icon-dot" style="background:#ff5252;"></div> Flood Stations</div>
+          <input type="checkbox" checked onchange="toggleLayer('floodStations', this.checked)">
+        </div>
+
+        <div class="layer-item">
+          <div class="layer-info"><div class="icon-dot" style="background:#5D4037;"></div> Dams</div>
+          <input type="checkbox" checked onchange="toggleLayer('dams', this.checked)">
+        </div>
+      </div>
+
+      <button class="category-btn">🌱 Ecosystems & Restoration</button>
+      <div class="layer-panel">
+        <div class="layer-item">
+          <div class="layer-info"><div class="icon-dot" style="background:gold;"></div> Desert Dams (Inventory)</div>
+          <input type="checkbox" checked onchange="toggleLayer('sites', this.checked)">
+        </div>
+      </div>
+
+      <button class="category-btn">🏙️ Built Environment</button>
+      <div class="layer-panel">
+        <div class="layer-item">
+          <div class="layer-info">
+            <div class="icon-box" style="background:#888;"></div>
+            LoD1 Buildings (3D Extrusion)
+          </div>
+          <input id="buildingsChk" type="checkbox" onchange="toggleLayer('buildings', this.checked)">
+        </div>
+
+        <div class="layer-item">
+          <div class="layer-info" style="font-size:12px; color:#9aa;">
+            Tip: If loading is slow, use <span style="color:#66fcf1;">mujib_lod1_simplified.geojson</span> or 3D Tiles.
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <div id="chartPanel">
+      <div id="chartHeader">
+        <div id="controlsRow">
+          <select id="scenarioSelect" class="dtSelect" onchange="refreshAll()">
+            <option value="baseline">Baseline</option>
+            <option value="marab">Marab</option>
+            <option value="vallerani">Vallerani</option>
+            <option value="combined">Combined</option>
+          </select>
+
+          <select id="whatifSelect" class="dtSelect" onchange="refreshAll()">
+            <option value="auto">What-if (auto)</option>
+          </select>
+
+          <select id="metricSelect" class="dtSelect" onchange="refreshAll()">
+            <option value="runoff">🌊 Runoff (SURQ)</option>
+            <option value="sediment">📉 Sediment (SYLD)</option>
+            <option value="groundwater">💧 Groundwater Recharge (PERC)</option>
+            <option value="vegetation">🌿 Vegetation / ET</option>
+            <option value="decision">✅ Decision: Best Intervention</option>
+          </select>
+        
+          <select id="viewModeSelect" class="dtSelect" onchange="refreshAll()" title="Map display mode">
+            <option value="absolute">View: Absolute</option>
+            <option value="delta">View: Δ vs Baseline</option>
+            <option value="pct">View: %Δ vs Baseline</option>
+          </select>
+</div>
+
+        <button id="closeChartBtn" onclick="document.getElementById('chartPanel').style.display='none'">
+          Close ✕
+        </button>
+      </div>
+
+      
+      <div id="chartTabs" role="tablist" aria-label="Charts">
+        <button id="tabHydrology" class="chartTabBtn active" type="button" onclick="setChartTab('hydrology')">Hydrology (SWAT)</button>
+        <button id="tabClimate" class="chartTabBtn" type="button" onclick="setChartTab('climate')">Climate (ERA5)</button>
+      </div>
+
+      <div id="hydrologyTab" class="chartTabPane">
+        <div id="hydrologyNotice">Hydrology scenarios are available only for the SWAT (71) sub-basin layer.</div>
+        
+        <div id="subInfoLine" style="margin:8px 0 10px; font-size:12px; color:#c5c6c7; line-height:1.35;">
+          Click a sub-basin to view details.
+        </div>
+
+        <div id="kpiRow" style="display:none; gap:8px; flex-wrap:wrap; margin:0 0 10px;">
+          <div class="climatePills" style="margin-top:0;">
+            <span class="climatePill" id="kpiRunoff">Runoff: —</span>
+            <span class="climatePill" id="kpiSediment">Sediment: —</span>
+            <span class="climatePill" id="kpiRecharge">Recharge: —</span>
+          </div>
+        </div>
+<canvas id="swatChart"></canvas>
+        <div id="rankPanel" style="display:none; margin-top:10px;">
+          <div class="assetSectionTitle" style="margin:10px 0 8px;">Top changes (selected metric)</div>
+          <div style="display:flex; gap:10px; flex-wrap:wrap;">
+            <div style="flex:1 1 150px; min-width:150px; background: rgba(31,40,51,0.35); border:1px solid rgba(255,255,255,0.06); border-radius:10px; padding:10px;">
+              <div style="font-size:12px; font-weight:800; color:#66fcf1; margin-bottom:6px;">Least Changed</div>
+              <ol id="topWinners" style="margin:0; padding-left:18px; font-size:12px; color:#c5c6c7; line-height:1.35;"></ol>
+            </div>
+            <div style="flex:1 1 150px; min-width:150px; background: rgba(31,40,51,0.35); border:1px solid rgba(255,255,255,0.06); border-radius:10px; padding:10px;">
+              <div style="font-size:12px; font-weight:800; color:#ffcc80; margin-bottom:6px;">Most Changed</div>
+              <ol id="topLosers" style="margin:0; padding-left:18px; font-size:12px; color:#c5c6c7; line-height:1.35;"></ol>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <div id="climateTab" class="chartTabPane" style="display:none;">
+        <div id="climateHeader">
+          <div id="climateTitle">ERA5 precipitation</div>
+          <button id="climateExpandBtn" class="miniActionBtn" type="button" title="Expand / Full view">⤢ Full view</button>
+          <button id="simRainBtn" class="miniActionBtn" type="button" aria-pressed="false" title="Response-based simulation: Rainfall → Runoff → Dam">+20% Rain</button>
+          <div id="climateStatus">Click a sub-basin to view monthly rainfall, anomaly and percentile.</div>
+          <div id="climatePills" class="climatePills"></div>
+        </div>
+        <div style="height:260px; margin-top:10px;">
+          <canvas id="climateChart"></canvas>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div id="legendPanel">
+    <strong id="legendTitle">Map</strong>
+    <div id="legendSubtitle" style="font-size: 11px; color:#aaa; margin-bottom:5px;">—</div>
+    <div class="gradient-bar" id="legendGradient"></div>
+    <div class="legend-labels" id="legendLabels">
+      <span>Low</span><span>Avg</span><span>High</span>
+    </div>
+  </div>
+
+  <!-- ✅ Right-side floating asset details -->
+  <div id="assetPanel" aria-label="Asset details">
+    <div id="assetPanelHeader">
+      <div style="min-width:0;">
+        <div id="assetPanelTitle">Asset</div>
+        <div id="assetPanelSubtitle">—</div>
+      </div>
+      <button id="assetPanelClose" title="Close">✕</button>
+    </div>
+    <div id="assetPanelBody"></div>
+  </div>
+
+  
+<!-- ============================
+     CLIMATE CHART - FULL VIEW MODAL (no data duplication; reuses existing chart data)
+     ============================ -->
+<div id="climateModal" class="modalOverlay" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="climateModalTitle">
+  <div class="modalCard" role="document">
+    <div class="modalHeader">
+      <div id="climateModalTitle" class="modalTitle">ERA5 precipitation — Full view</div>
+      <div class="modalActions">
+        <button id="climateModalClose" class="miniActionBtn" type="button" title="Close">✕</button>
+      </div>
+    </div>
+    <div class="modalBody">
+      <canvas id="climateChartBig"></canvas>
+    </div>
+    <div class="modalHint">Tip: scroll / pinch to zoom, drag to pan (x-axis)</div>
+  </div>
+</div>
+
+<div id="cesiumContainer"></div>
+
+<script>
+  // ============================
+  // CONFIG (YOUR FILES)
+  // ============================
+  const YOUR_ACCESS_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI1ZjM2YjEyMC1lNTM1LTQzZmUtYjUwNi00ZGVmMmE4ZjdmYTgiLCJpZCI6MzY3MDE2LCJpYXQiOjE3NjQ5NDc0NDl9.jgizcSHHOPz8Q9DroBtP3pkAFsjrlCQxRuhWrIFoGi4';
+  const MY_MUJIB_DEM_ASSET_ID = 4194989;
+
+  // Cache-buster to avoid browser serving an older GeoJSON (important when you re-export files)
+  const CACHE_BUSTER = `v=${Date.now()}`;
+
+  // Expected approximate bounds for Wala–Mujib area (WGS84 lon/lat).
+  // Used to detect CRS mistakes (e.g., UTM coords or swapped lat/lon) and auto-fix in-browser.
+  const EXPECTED_BOUNDS = { lonMin: 34.0, lonMax: 37.8, latMin: 29.0, latMax: 33.8 };
+  const EXPECTED_CENTER = {
+    lon: (EXPECTED_BOUNDS.lonMin + EXPECTED_BOUNDS.lonMax) / 2,
+    lat: (EXPECTED_BOUNDS.latMin + EXPECTED_BOUNDS.latMax) / 2
+  };
+
+  // Most Jordan GIS layers are often in UTM Zone 36N.
+  // If a GeoJSON is exported without a CRS (no .prj earlier), it may accidentally be in UTM meters.
+  const DEFAULT_PROJECTED_CRS = "EPSG:32636"; // WGS84 / UTM zone 36N
+
+  // If you know your input is a different UTM zone, change this (e.g., EPSG:32637).
+  const PROJECTED_CRS_FALLBACKS = ["EPSG:32636", "EPSG:32637"];
+
+  // Define EPSG codes for proj4 (kept local so the HTML is portable)
+  if (window.proj4 && typeof window.proj4.defs === "function") {
+    proj4.defs("EPSG:32636", "+proj=utm +zone=36 +datum=WGS84 +units=m +no_defs");
+    proj4.defs("EPSG:32637", "+proj=utm +zone=37 +datum=WGS84 +units=m +no_defs");
+    proj4.defs("EPSG:4326", "+proj=longlat +datum=WGS84 +no_defs");
+  }
+
+  function withCacheBust(url) {
+    if (!url) return url;
+    const hasQ = url.includes("?");
+    return url + (hasQ ? "&" : "?") + CACHE_BUSTER;
+  }
+
+  // ----- GeoJSON CRS sanity helpers (alignment fix) -----
+  function walkCoords(coords, fn) {
+    if (!Array.isArray(coords)) return coords;
+    if (coords.length >= 2 && typeof coords[0] === "number" && typeof coords[1] === "number") {
+      return fn(coords);
+    }
+    return coords.map(c => walkCoords(c, fn));
+  }
+
+  function cloneJson(obj) {
+    return JSON.parse(JSON.stringify(obj));
+  }
+
+  function geojsonBbox(obj) {
+    let minx = Infinity, miny = Infinity, maxx = -Infinity, maxy = -Infinity;
+    function visit(c) {
+      if (!Array.isArray(c) || c.length < 2) return;
+      const x = Number(c[0]), y = Number(c[1]);
+      if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+      if (x < minx) minx = x;
+      if (y < miny) miny = y;
+      if (x > maxx) maxx = x;
+      if (y > maxy) maxy = y;
+    }
+    function handleGeom(geom) {
+      if (!geom || !geom.type) return;
+      if (geom.type === "GeometryCollection" && Array.isArray(geom.geometries)) {
+        geom.geometries.forEach(handleGeom);
+        return;
+      }
+      if (geom.coordinates) {
+        walkCoords(geom.coordinates, (c) => { visit(c); return c; });
+      }
+    }
+    if (!obj) return null;
+    if (obj.type === "FeatureCollection" && Array.isArray(obj.features)) {
+      obj.features.forEach(f => handleGeom(f.geometry));
+    } else if (obj.type === "Feature" && obj.geometry) {
+      handleGeom(obj.geometry);
+    } else if (obj.type && obj.coordinates) {
+      handleGeom(obj);
+    }
+    if (!Number.isFinite(minx) || !Number.isFinite(miny)) return null;
+    return { minx, miny, maxx, maxy };
+  }
+
+  function bboxOverlapsExpected(bb) {
+    if (!bb) return false;
+    const lonOk = bb.maxx >= EXPECTED_BOUNDS.lonMin && bb.minx <= EXPECTED_BOUNDS.lonMax;
+    const latOk = bb.maxy >= EXPECTED_BOUNDS.latMin && bb.miny <= EXPECTED_BOUNDS.latMax;
+    return lonOk && latOk;
+  }
+
+  function bboxCenter(bb) {
+    if (!bb) return null;
+    return { lon: (bb.minx + bb.maxx) / 2, lat: (bb.miny + bb.maxy) / 2 };
+  }
+
+  function haversineKm(a, b) {
+    if (!a || !b) return Number.POSITIVE_INFINITY;
+    const R = 6371.0;
+    const toRad = (d) => d * Math.PI / 180;
+    const dLat = toRad(b.lat - a.lat);
+    const dLon = toRad(b.lon - a.lon);
+    const la1 = toRad(a.lat);
+    const la2 = toRad(b.lat);
+    const s1 = Math.sin(dLat / 2);
+    const s2 = Math.sin(dLon / 2);
+    const h = s1 * s1 + Math.cos(la1) * Math.cos(la2) * s2 * s2;
+    return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
+  }
+
+  function looksProjected(bb) {
+    if (!bb) return false;
+    // Anything outside lon/lat bounds OR typical UTM magnitudes
+    if (bb.maxx > 180 || bb.minx < -180 || bb.maxy > 90 || bb.miny < -90) return true;
+    if (Math.abs(bb.maxx) > 1000 || Math.abs(bb.maxy) > 1000) return true;
+    return false;
+  }
+
+  function swapXYGeoJSON(obj) {
+    const out = cloneJson(obj);
+    function swap(c) { return [c[1], c[0], ...(c.length > 2 ? c.slice(2) : [])]; }
+    function handleGeom(geom) {
+      if (!geom) return;
+      if (geom.type === "GeometryCollection" && Array.isArray(geom.geometries)) {
+        geom.geometries.forEach(handleGeom);
+        return;
+      }
+      if (geom.coordinates) geom.coordinates = walkCoords(geom.coordinates, swap);
+    }
+    if (out.type === "FeatureCollection" && Array.isArray(out.features)) {
+      out.features.forEach(f => handleGeom(f.geometry));
+    } else if (out.type === "Feature" && out.geometry) {
+      handleGeom(out.geometry);
+    } else if (out.type && out.coordinates) {
+      handleGeom(out);
+    }
+    return out;
+  }
+
+  function reprojectGeoJSON(obj, fromEpsg) {
+    if (!window.proj4) return { obj, ok: false, note: "proj4 missing" };
+    const out = cloneJson(obj);
+    function tx(c) {
+      const x = Number(c[0]), y = Number(c[1]);
+      if (!Number.isFinite(x) || !Number.isFinite(y)) return c;
+      const ll = proj4(fromEpsg, "EPSG:4326", [x, y]);
+      return [ll[0], ll[1], ...(c.length > 2 ? c.slice(2) : [])];
+    }
+    function handleGeom(geom) {
+      if (!geom) return;
+      if (geom.type === "GeometryCollection" && Array.isArray(geom.geometries)) {
+        geom.geometries.forEach(handleGeom);
+        return;
+      }
+      if (geom.coordinates) geom.coordinates = walkCoords(geom.coordinates, tx);
+    }
+    if (out.type === "FeatureCollection" && Array.isArray(out.features)) {
+      out.features.forEach(f => handleGeom(f.geometry));
+    } else if (out.type === "Feature" && out.geometry) {
+      handleGeom(out.geometry);
+    } else if (out.type && out.coordinates) {
+      handleGeom(out);
+    }
+    return { obj: out, ok: true, note: `reprojected ${fromEpsg}→EPSG:4326` };
+  }
+
+  function normalizeGeoJSON(obj, label, referenceCenter = null) {
+    // Strategy:
+    // - Build candidate variants: original, swapped lon/lat, and (if looks projected) reprojected from common CRS.
+    // - Score candidates by: whether they overlap EXPECTED_BOUNDS (Jordan-ish), whether they still look projected,
+    //   and distance to a reference center (e.g. basin layer center). Pick the lowest-score candidate.
+    try {
+      const ref = referenceCenter || EXPECTED_CENTER;
+      const candidates = [];
+      const bb0 = geojsonBbox(obj);
+      candidates.push({ obj, bb: bb0, note: "original" });
+
+      const swapped = swapXYGeoJSON(obj);
+      const bbS = geojsonBbox(swapped);
+      candidates.push({ obj: swapped, bb: bbS, note: "swapped lon/lat" });
+
+      if (looksProjected(bb0)) {
+        for (const epsg of PROJECTED_CRS_FALLBACKS) {
+          const rp = reprojectGeoJSON(obj, epsg);
+          if (rp.ok) {
+            candidates.push({ obj: rp.obj, bb: geojsonBbox(rp.obj), note: rp.note });
+          }
+        }
+      }
+
+      function score(c) {
+        if (!c.bb) return Number.POSITIVE_INFINITY;
+        let s = 0;
+        // Penalize being outside expected bounds heavily (but don't make it impossible)
+        if (!bboxOverlapsExpected(c.bb)) s += 10000;
+        // Penalize candidates that still look projected
+        if (looksProjected(c.bb)) s += 5000;
+        const ctr = bboxCenter(c.bb);
+        s += haversineKm(ctr, ref); // km distance to ref
+        return s;
+      }
+
+      let best = candidates[0];
+      let bestScore = score(best);
+      for (const c of candidates) {
+        const sc = score(c);
+        if (sc < bestScore) { best = c; bestScore = sc; }
+      }
+
+      const bestCtr = bboxCenter(best.bb);
+      const dist = haversineKm(bestCtr, ref);
+      const note = (best.note === "original" && bboxOverlapsExpected(best.bb))
+        ? "ok"
+        : `fixed (${best.note})`;
+
+      if (label) {
+        console.log(`🧭 normalizeGeoJSON[${label}]: picked '${note}' (dist-to-ref ≈ ${dist.toFixed(1)} km)`);
+      }
+
+      return { obj: best.obj, note, bbox: best.bb, center: bestCtr, distKmToRef: dist };
+    } catch (e) {
+      console.warn("normalizeGeoJSON failed for", label, e);
+      return { obj, note: "normalize failed" };
+    }
+  }
+
+  // Put these NEXT TO index.html
+  // Full basin subbasins layer (429 features) with annual runoff & sediment
+  // This file contains all subbasin polygons covering the official Mujib basin.
+  // Each feature has properties:
+  //   runoff_y  – annual water yield (mm) from SWAT or proxy
+  //   sed_y     – annual sediment yield (t/ha) from SWAT or proxy
+  //   source    – "SWAT" if the value comes from the SWAT model (71 subbasins), or "PROXY" otherwise
+  //   proxy_from_SUB – SUB ID of the nearest SWAT subbasin used to generate proxy values
+  // Subbasins file covering the full Mujib basin (429 polygons).
+  // We derive the SWAT-only (71) layer by filtering features where properties.source == "SWAT".
+  const SUBBASINS_FULL_GEOJSON = 'subbasins_FULL429_with_runoff_sed_proxy.geojson';
+
+  // Scenario JSON (unused for now but kept for compatibility).  
+  // When using annual SWAT + proxy data, scenarios are not applied; however we keep the constant
+  // in case the user wants to re-enable dP/dT toggles later.  
+  const SCENARIO_JSON = 'scenarios_USED_BY_CESIUM_FINAL_71.json';
+
+  // ERA5 monthly precipitation (subbasin-aggregated, compact JSON)
+  const ERA5_CLIMATE_JSON = 'era5_precip_monthly_ALL429_compact.json';
+
+  // Subbasin locations (precomputed representative point lat/lon for ALL 429)
+  const SUBBASIN_LOC_JSON = 'subbasin_locations_ALL429.json';
+  // Optional: nearest settlement/admin name per subbasin (offline-generated). If missing, DT will still work.
+  const SUBBASIN_PLACE_JSON = 'subbasin_places_ALL429.json';
+
+  // LoD1 buildings (put next to index.html)
+  // Use the clipped version to avoid buildings outside the official basin.
+  const LOD1_BUILDINGS_GEOJSON = 'mujib_lod1_simplified_CLIPPED.geojson';
+
+  // Extra layers (converted from SHP -> GeoJSON)
+  const FLOOD_STATIONS_GEOJSON = 'flood_stations.geojson';
+  const DAMS_GEOJSON = 'dams.geojson';
+
+  // Desert dams inventory (points)
+  const DESERT_DAMS_GEOJSON = 'interventions.json';
+
+  // Dam English name overrides (Arabic -> English)
+  const DAM_EN_NAME_OVERRIDE = {
+    "سد الواله": "Wala Dam"
+  };
+
+  // ============================
+  // STATUS UI
+  // ============================
+  const subStatus = document.getElementById('subStatus');
+  const jsonStatus = document.getElementById('jsonStatus');
+  const hoverStatus = document.getElementById('hoverStatus');
+  const clickStatus = document.getElementById('clickStatus');
+
+  const scenarioSelect = document.getElementById('scenarioSelect');
+  const whatifSelect = document.getElementById('whatifSelect');
+  const metricSelect = document.getElementById('metricSelect');
+
+  // ============================
+  // Metric ranges (computed after loading subbasins)
+  // These hold the min and max values for runoff and sediment across all subbasins.
+  // They are filled in loadSubbasinsLayer() and used by applyNumericMap() to normalize colors.
+  const subMetricRanges = {
+    runoff: { min: null, max: null },
+    sediment: { min: null, max: null }
+  };
+
+  const legendPanel = document.getElementById('legendPanel');
+  const legendTitle = document.getElementById('legendTitle');
+  const legendSubtitle = document.getElementById('legendSubtitle');
+  const legendLabels = document.getElementById('legendLabels');
+  const legendGradient = document.getElementById('legendGradient');
+
+  // ============================
+  // RIGHT-SIDE ASSET PANEL (Flood Stations + Dams)
+  // ============================
+  const assetPanel = document.getElementById('assetPanel');
+  const assetPanelTitle = document.getElementById('assetPanelTitle');
+  const assetPanelSubtitle = document.getElementById('assetPanelSubtitle');
+  const assetPanelBody = document.getElementById('assetPanelBody');
+  const assetPanelClose = document.getElementById('assetPanelClose');
+
+  function showAssetPanel(title, subtitle, bodyHtml) {
+    assetPanelTitle.textContent = title || 'Asset';
+    assetPanelSubtitle.textContent = subtitle || '';
+    assetPanelBody.innerHTML = bodyHtml || '';
+    assetPanel.style.display = 'block';
+  }
+  function hideAssetPanel() { assetPanel.style.display = 'none'; }
+
+  assetPanelClose.addEventListener('click', hideAssetPanel);
+
+  function escapeHtml(x){
+    if (x === null || x === undefined) return '';
+    return String(x)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
+  function propVal(props, key) {
+    if (!props) return null;
+    const p = props[key];
+    if (!p) return null;
+    try {
+      return (typeof p.getValue === "function") ? p.getValue(Cesium.JulianDate.now()) : p;
+    } catch {
+      return null;
+    }
+  }
+
+  function propAny(props, keys) {
+    for (const k of keys) {
+      const v = propVal(props, k);
+      if (v !== null && v !== undefined && v !== "") return v;
+    }
+    return null;
+  }
+
+  function getEntityCenterCartographic(entity){
+    const now = Cesium.JulianDate.now();
+    let cart = null;
+
+    try {
+      if (entity.position && typeof entity.position.getValue === "function") {
+        cart = entity.position.getValue(now);
+      } else if (entity.position) {
+        cart = entity.position;
+      }
+    } catch {}
+
+    if (!cart && entity.polygon && entity.polygon.hierarchy) {
+      try {
+        const h = entity.polygon.hierarchy.getValue ? entity.polygon.hierarchy.getValue(now) : entity.polygon.hierarchy;
+        const positions = h?.positions;
+        if (positions && positions.length) cart = Cesium.BoundingSphere.fromPoints(positions).center;
+      } catch {}
+    }
+
+    if (!cart && entity.polyline && entity.polyline.positions) {
+      try {
+        const positions = entity.polyline.positions.getValue ? entity.polyline.positions.getValue(now) : entity.polyline.positions;
+        if (positions && positions.length) cart = Cesium.BoundingSphere.fromPoints(positions).center;
+      } catch {}
+    }
+
+    if (!cart) return null;
+    return Cesium.Cartographic.fromCartesian(cart);
+  }
+
+  function latLonString(entity){
+    const c = getEntityCenterCartographic(entity);
+    if (!c) return null;
+    const lat = Cesium.Math.toDegrees(c.latitude);
+    const lon = Cesium.Math.toDegrees(c.longitude);
+    return `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
+  }
+
+  function extractAllProps(entity){
+    const props = entity?.properties;
+    if (!props || !Array.isArray(props.propertyNames)) return {};
+    const out = {};
+    const now = Cesium.JulianDate.now();
+    props.propertyNames.forEach((name) => {
+      try {
+        const p = props[name];
+        out[name] = (p && typeof p.getValue === "function") ? p.getValue(now) : p;
+      } catch {
+        out[name] = null;
+      }
+    });
+    return out;
+  }
+
+  function kv(label, value){
+    const v = (value === null || value === undefined || value === "") ? "—" : value;
+    return `<div class="kv"><div class="k">${escapeHtml(label)}</div><div class="v">${escapeHtml(v)}</div></div>`;
+  }
+
+  function flyToEntity(entity){
+    if (!entity) return;
+    try {
+      viewer.flyTo(entity, { duration: 1.2, offset: new Cesium.HeadingPitchRange(0, -0.55, 2500) });
+    } catch {
+      viewer.flyTo(entity);
+    }
+  }
+
+  function renderFloodStationPanel(entity){
+    const p = entity.properties;
+    const stationId = propAny(p, ["Station_Id","Station_ID","station_id","ID","Id"]);
+    const stationName = propAny(p, ["Station_Na","Station_Name","Name","name"]);
+    const sub = propAny(p, ["Subbasin","Sub_Basin","Basin","Surface_Ba"]);
+    const gov = propAny(p, ["Governorat","Governorate"]);
+    const own = propAny(p, ["Ownership"]);
+    const elev = propAny(p, ["Elevation","ELEVATION"]);
+    const date = propAny(p, ["Date_stati","Date_start","Date"]);
+    const village = propAny(p, ["Village_To","Village"]);
+
+    const coords = latLonString(entity);
+
+    const title = stationName ? `${stationName}` : "Flood Station";
+    const subtitle = `Station ID: ${stationId || "—"}${sub ? " • " + sub : ""}`;
+
+    const body = `
+      <div class="assetBadges">
+        <div class="assetBadge">Flood Station</div>
+        <div class="assetBadge">ID: ${escapeHtml(stationId || "—")}</div>
+        <div class="assetBadge">Lat/Lon: ${escapeHtml(coords || "—")}</div>
+      </div>
+
+      <div class="assetActions">
+        <button class="assetBtn" id="assetZoomBtn">Zoom to</button>
+      </div>
+
+      <div class="assetSectionTitle">Key details</div>
+      <div class="kvGrid">
+        ${kv("Station Name", stationName)}
+        ${kv("Station ID", stationId)}
+        ${kv("Subbasin", propAny(p, ["Subbasin"]))}
+        ${kv("Elevation (m)", elev)}
+        ${kv("Governorate", gov)}
+        ${kv("Ownership", own)}
+        ${kv("Start date", date)}
+        ${kv("Nearest village/town", village)}
+      </div>
+
+      <details class="assetDetails">
+        <summary>All attributes</summary>
+        <pre class="assetJson">${escapeHtml(JSON.stringify(extractAllProps(entity), null, 2))}</pre>
+      </details>
+    `;
+
+    showAssetPanel(title, subtitle, body);
+    const btn = document.getElementById("assetZoomBtn");
+    if (btn) btn.onclick = () => flyToEntity(entity);
+  }
+
+  function renderDamPanel(entity){
+    const p = entity.properties;
+    const en = propAny(p, ["En_name","EN_NAME","Name","NAME"]);
+    const ar = propAny(p, ["Ar_Name","AR_NAME"]);
+    const node = propAny(p, ["NODE_ID","Node_ID","node_id","ID"]);
+    const type = propAny(p, ["TYPE","Type"]);
+    const status = propAny(p, ["STATUS","Status"]);
+    const comp = propAny(p, ["COMPLETION","Completion"]);
+    const damType = propAny(p, ["DAM_TYPE","Dam_Type"]);
+    const height = propAny(p, ["HEIGHT__M_","HEIGHT_M","HEIGHT"]);
+    const catchment = propAny(p, ["CATCHMENT_","CATCHMENT","Catchment"]);
+    const live = propAny(p, ["LIVE_STORA","LIVE_STORAGE"]);
+    const dead = propAny(p, ["DEAD_STORA","DEAD_STORAGE"]);
+    const purpose = propAny(p, ["PURPOSE","Purpose"]);
+    const spill = propAny(p, ["SPILLWAY_C","SPILLWAY"]);
+    const saf = propAny(p, ["YEARLY_SAF","SAFE_YIELD"]);
+    const sed = propAny(p, ["SEDIMENT_L","SEDIMENT"]);
+    const evap = propAny(p, ["EVAPORAT_1","EVAPORATIO","Evaporation"]);
+    const maxEl = propAny(p, ["MAX_ELEVAT","MAX_ELEVATION"]);
+    const free = propAny(p, ["FREE_BOARD","FREEBOARD"]);
+
+    const coords = latLonString(entity);
+    const title = entity.assetName || en || ar || "Dam / Reservoir";
+    const subtitle = `${node ? "Node: " + node : "Dam asset"}${type ? " • " + type : ""}`;
+
+    const body = `
+      <div class="assetBadges">
+        <div class="assetBadge">${escapeHtml((type || "Dam").toString())}</div>
+        ${node ? `<div class="assetBadge">Node: ${escapeHtml(node)}</div>` : ``}
+        <div class="assetBadge">Lat/Lon: ${escapeHtml(coords || "—")}</div>
+      </div>
+
+      <div class="assetActions">
+        <button class="assetBtn" id="assetZoomBtn">Zoom to</button>
+      </div>
+
+      <div class="assetSectionTitle">Names</div>
+      <div class="kvGrid">
+        ${kv("English name", en)}
+        ${kv("Arabic name", entity.assetNameAr || ar)}
+        ${kv("Node ID", node)}
+        ${kv("Type", type)}
+      </div>
+
+      <div class="assetSectionTitle">Status & design</div>
+      <div class="kvGrid">
+        ${kv("Status", status)}
+        ${kv("Completion", comp)}
+        ${kv("Dam type", damType)}
+        ${kv("Height (m)", height)}
+        ${kv("Max elevation (m)", maxEl)}
+        ${kv("Freeboard (m)", free)}
+        ${kv("Spillway capacity", spill)}
+      </div>
+
+      <div class="assetSectionTitle">Hydrology & storage</div>
+      <div class="kvGrid">
+        ${kv("Catchment", catchment)}
+        ${kv("Purpose", purpose)}
+        ${kv("Live storage", live)}
+        ${kv("Dead storage", dead)}
+        ${kv("Safe yield / yearly", saf)}
+        ${kv("Sediment load", sed)}
+        ${kv("Evaporation", evap)}
+      </div>
+
+      <details class="assetDetails">
+        <summary>All attributes</summary>
+        <pre class="assetJson">${escapeHtml(JSON.stringify(extractAllProps(entity), null, 2))}</pre>
+      </details>
+    `;
+
+    showAssetPanel(title, subtitle, body);
+    const btn = document.getElementById("assetZoomBtn");
+    if (btn) btn.onclick = () => flyToEntity(entity);
+  }
+
+  
+  function renderDesertDamPanel(entity){
+    const p = entity.properties;
+
+    // Desert dam inventory fields (from interventions.json)
+    const name = propAny(p, ["Dam_Name","DAM_NAME","Name","NAME"]);
+    const whNo = propAny(p, ["WH_No","WH_NO","WHNO","ID","Id"]);
+    const gov = propAny(p, ["Governorat","Governorate","GOVERNORAT"]);
+    const project = propAny(p, ["Project","PROJECT"]);
+    const damType = propAny(p, ["Dam_type","DAM_TYPE","Type","TYPE"]);
+    const year = propAny(p, ["Constructi","Construction","Year","YEAR"]);
+    const curCap = propAny(p, ["Current_ca","CURRENT_CA","CurrentCap"]);
+    const desCap = propAny(p, ["Design_Cap","DESIGN_CAP","DesignCap"]);
+    const east = propAny(p, ["East","EAST"]);
+    const north = propAny(p, ["North","NORTH"]);
+
+    const coords = latLonString(entity);
+    const title = name ? String(name) : 'Desert Dam';
+    const subtitle = `WH No: ${whNo || '—'}${gov ? ' • ' + gov : ''}`;
+
+    const body = `
+      <div class="assetBadges">
+        <div class="assetBadge">Desert Dam (Inventory)</div>
+        ${whNo ? `<div class="assetBadge">WH No: ${escapeHtml(String(whNo))}</div>` : ``}
+        <div class="assetBadge">Lat/Lon: ${escapeHtml(coords || '—')}</div>
+      </div>
+
+      <div class="assetActions">
+        <button class="assetBtn" id="assetZoomBtn">Zoom to</button>
+      </div>
+
+      <div class="assetSectionTitle">Key details</div>
+      <div class="kvGrid">
+        ${kv('Dam name', name)}
+        ${kv('WH No', whNo)}
+        ${kv('Governorate', gov)}
+        ${kv('Project', project)}
+        ${kv('Dam type', damType)}
+        ${kv('Construction year', year)}
+        ${kv('Current capacity', curCap)}
+        ${kv('Design capacity', desCap)}
+        ${kv('East (source)', east)}
+        ${kv('North (source)', north)}
+      </div>
+
+      <details class="assetDetails">
+        <summary>All attributes</summary>
+        <pre class="assetJson">${escapeHtml(JSON.stringify(extractAllProps(entity), null, 2))}</pre>
+      </details>
+    `;
+
+    showAssetPanel(title, subtitle, body);
+    const btn = document.getElementById('assetZoomBtn');
+    if (btn) btn.onclick = () => flyToEntity(entity);
+  }
+
+function renderBuildingPanel(entity){
+    const p = entity.properties;
+
+    const bId = propAny(p, ["id","ID","identificatie","Identificatie","bag_id","BAG_ID","pand_id","Pand_ID","pandid","PANDID","building_id","Building_ID"]);
+    const name = propAny(p, ["name","Name","building_name","Building_Name","pandnaam","PandNaam"]);
+
+    const h = Number.isFinite(entity.buildingHeight)
+      ? entity.buildingHeight
+      : Number(propAny(p, ["height","Height"]));
+    const hOk = Number.isFinite(h);
+    const src = entity.heightSource || (propAny(p, ["height"]) != null ? "height" : (propAny(p, ["Height"]) != null ? "Height" : "unknown"));
+
+    const coords = latLonString(entity);
+    const title = name ? String(name) : (bId ? `Building ${bId}` : "Building");
+    const subtitle = `Height: ${hOk ? (h + ' m') : '—'} • Source: ${src}`;
+
+    const body = `
+      <div class="assetBadges">
+        <div class="assetBadge">Building (LoD1)</div>
+        ${bId ? `<div class="assetBadge">ID: ${escapeHtml(String(bId))}</div>` : ``}
+        <div class="assetBadge">Lat/Lon: ${escapeHtml(coords || '—')}</div>
+      </div>
+
+      <div class="assetActions">
+        <button class="assetBtn" id="assetZoomBtn">Zoom to</button>
+      </div>
+
+      <div class="assetSectionTitle">Key details</div>
+      <div class="kvGrid">
+        ${kv("Name", name)}
+        ${kv("Building ID", bId)}
+        ${kv("Extrusion height (m)", hOk ? h : null)}
+        ${kv("Height source", src)}
+      </div>
+
+      <details class="assetDetails">
+        <summary>All attributes</summary>
+        <pre class="assetJson">${escapeHtml(JSON.stringify(extractAllProps(entity), null, 2))}</pre>
+      </details>
+    `;
+
+    showAssetPanel(title, subtitle, body);
+    const btn = document.getElementById("assetZoomBtn");
+    if (btn) btn.onclick = () => flyToEntity(entity);
+  }
+
+
+  // ============================
+  // CESIUM VIEWER
+  // ============================
+  Cesium.Ion.defaultAccessToken = YOUR_ACCESS_TOKEN;
+
+  const viewer = new Cesium.Viewer('cesiumContainer', {
+    baseLayerPicker: true,
+    animation: true,
+    timeline: true,
+    geocoder: false,
+    homeButton: false,
+    sceneModePicker: true,
+    selectionIndicator: true,
+    infoBox: false
+  });
+
+  viewer.scene.globe.depthTestAgainstTerrain = false;
+
+  async function loadTerrain() {
+    try {
+      viewer.terrainProvider = await Cesium.CesiumTerrainProvider.fromIonAssetId(MY_MUJIB_DEM_ASSET_ID);
+    } catch (e) {
+      console.error("Terrain Error", e);
+    }
+  }
+  loadTerrain();
+
+  // ============================
+  // DATA / STATE
+  // ============================
+  let scenarioData = null;
+  // Reference for CRS/order auto-fixing: once basin is loaded, we use its bbox center as
+  // the target so subbasins (and other layers) are automatically transformed to match it.
+  let basinRefCenter = null;
+  let basinRefBbox = null;
+  let subbasinsRefCenter = null;
+  let alignmentRetryDone = false;
+  let currentSubbasinId = null;
+  let selectedSubbasinEntity = null; // label shown only for the selected sub-basin
+  let myChart = null;
+
+  // Climate (ERA5) panel state
+  let activeChartTab = 'hydrology';
+  let era5ClimateCache = null;
+  let era5ClimatePromise = null;
+  let climateChart = null;
+
+  // Subbasin info (ALL 429): lat/lon + optional nearest place/admin name (loaded once)
+  let SUB_LOC = null;
+  let SUB_PLACE = null;
+
+  async function loadSubLocations() {
+    if (SUB_LOC) return SUB_LOC;
+    const r = await fetch(withCacheBust(SUBBASIN_LOC_JSON));
+    SUB_LOC = await r.json();
+    console.log("✅ Subbasin locations loaded:", Object.keys(SUB_LOC).length);
+    return SUB_LOC;
+  }
+
+  async function loadSubPlacesOptional() {
+    if (SUB_PLACE) return SUB_PLACE;
+    try {
+      const r = await fetch(withCacheBust(SUBBASIN_PLACE_JSON));
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      SUB_PLACE = await r.json();
+      console.log("✅ Subbasin places loaded:", Object.keys(SUB_PLACE).length);
+    } catch (e) {
+      // Optional file: safe to ignore
+      SUB_PLACE = null;
+      console.warn("ℹ️ Subbasin places file not found (optional):", SUBBASIN_PLACE_JSON);
+    }
+    return SUB_PLACE;
+  }
+
+
+  // Map state
+  let heatmapOn = false;
+  let isDeltaMode = false;        // Δ vs baseline (numeric metrics)
+  let isPercentMode = false;      // %Δ vs baseline (numeric metrics)
+  let hoverHandlerInstalled = false;
+  let lastHover = null;
+
+  // ============================
+  // LOAD SCENARIOS
+  // ============================
+  async function loadScenarioData() {
+    try {
+      const res = await fetch(withCacheBust(SCENARIO_JSON));
+      if (!res.ok) throw new Error(`HTTP ${res.status} for ${SCENARIO_JSON}`);
+      scenarioData = await res.json();
+
+      const keys = Object.keys(scenarioData || {});
+      // Expect 71 subbasins (Subbasin_1..Subbasin_71) in the rebuilt JSON.
+      const ok = (keys.length === 71 && scenarioData["Subbasin_1"] && scenarioData["Subbasin_71"]);
+      jsonStatus.textContent = `loaded (${keys.length} keys) ${ok ? '✅' : '⚠️'}`;
+      jsonStatus.className = ok ? 'ok' : 'warn';
+
+      setupWhatifDropdown();
+      console.log("✅ scenarios loaded:", keys.slice(0,5), "…");
+
+    } catch (err) {
+      console.error("❌ Scenario JSON load failed:", err);
+      jsonStatus.textContent = 'FAILED ❌';
+      jsonStatus.className = 'bad';
+      alert(`Could not load ${SCENARIO_JSON}. Put it next to index.html and run with Live Server (not file://).`);
+    }
+  }
+
+  function setupWhatifDropdown() {
+    whatifSelect.innerHTML = `<option value="auto">What-if (auto)</option>`;
+
+    const s1 = scenarioData?.["Subbasin_1"];
+    const whatifs = s1?.whatifs ? Object.keys(s1.whatifs) : [];
+    if (whatifs.length === 0) {
+      const opt = document.createElement("option");
+      opt.value = "dP0_dT0";
+      opt.textContent = "dP0_dT0 (fallback)";
+      whatifSelect.appendChild(opt);
+      whatifSelect.value = "auto";
+      return;
+    }
+
+    const def = s1.default_whatif || whatifs[0];
+    const ordered = [def, ...whatifs.filter(x => x !== def)];
+    ordered.forEach(k => {
+      const opt = document.createElement("option");
+      opt.value = k;
+      opt.textContent = k;
+      whatifSelect.appendChild(opt);
+    });
+
+    whatifSelect.value = "auto";
+  }
+
+  function getActiveWhatifKey(subId) {
+    const selected = whatifSelect.value;
+    if (selected !== "auto") return selected;
+    const s = scenarioData?.[`Subbasin_${subId}`] || scenarioData?.["Subbasin_1"];
+    return (s?.default_whatif) || "dP0_dT0";
+  }
+
+  function getWhatifObject(subId) {
+    const node = scenarioData?.[`Subbasin_${subId}`];
+    if (!node) return null;
+    const wKey = getActiveWhatifKey(subId);
+    const wObj = node.whatifs?.[wKey];
+    return { node, wKey, wObj };
+  }
+
+  // ============================
+  // METRIC GETTERS
+  // ============================
+  function getAnnualValue(subId, scenarioName, metricName) {
+    const pack = getWhatifObject(subId);
+    if (!pack) return null;
+
+    const { node, wObj } = pack;
+
+    let v = wObj?.annual?.[scenarioName]?.[metricName];
+    if (Number.isFinite(v)) return v;
+
+    v = wObj?.annual_by_scenario?.[metricName]?.[scenarioName];
+    if (Number.isFinite(v)) return v;
+
+    if (metricName === "runoff") {
+      v = wObj?.annual_runoff_by_scenario?.[scenarioName];
+      if (Number.isFinite(v)) return v;
+      v = node?.annual_runoff_by_scenario?.[scenarioName];
+      if (Number.isFinite(v)) return v;
+      v = node?.annual_runoff_mm;
+      if (Number.isFinite(v)) return v;
+    }
+
+    v = node?.[`annual_${metricName}_by_scenario`]?.[scenarioName];
+    if (Number.isFinite(v)) return v;
+
+    v = node?.[`annual_${metricName}`];
+    if (Number.isFinite(v)) return v;
+
+    return null;
+  }
+
+  function getDeltaAnnual(subId, scenarioName, metricName) {
+    const base = getAnnualValue(subId, "baseline", metricName);
+    const sel  = getAnnualValue(subId, scenarioName, metricName);
+    if (!Number.isFinite(base) || !Number.isFinite(sel)) return null;
+    return sel - base;
+  }
+
+
+  function getPctDeltaAnnual(subId, scenarioName, metricName) {
+    const base = getAnnualValue(subId, "baseline", metricName);
+    const sel  = getAnnualValue(subId, scenarioName, metricName);
+    if (!Number.isFinite(base) || !Number.isFinite(sel)) return null;
+    const b = Number(base);
+    if (Math.abs(b) < 1e-9) return null; // avoid division by zero
+    return ((Number(sel) - b) / b) * 100.0;
+  }
+
+  function getScenarioMetricValue(subId, scenarioName, metricName) {
+    const vm = (document.getElementById("viewModeSelect")?.value) || "absolute";
+    if (vm === "absolute") return getAnnualValue(subId, scenarioName, metricName);
+    if (vm === "pct") return getPctDeltaAnnual(subId, scenarioName, metricName);
+    return getDeltaAnnual(subId, scenarioName, metricName);
+  }
+
+  // ============================
+  // DECISION (PRIORITY) GETTERS
+  // ============================
+  function getPriorityPack(subId) {
+    const key = `Subbasin_${subId}`;
+    const node = scenarioData?.[key];
+    if (!node) return null;
+
+    const wKey = getActiveWhatifKey(subId);
+    const wObj = node.whatifs?.[wKey];
+    if (!wObj) return null;
+
+    const scenarioName = scenarioSelect.value;
+    const pr = wObj.priority_by_scenario?.[scenarioName] || {};
+    const sum = wObj.priority_summary_by_scenario?.[scenarioName] || {};
+
+    return { wKey, wObj, pr, sum };
+  }
+
+  function focusColor(focus) {
+    if (focus === "marab")     return Cesium.Color.ORANGE;
+    if (focus === "vallerani") return Cesium.Color.MEDIUMPURPLE;
+    if (focus === "recharge")  return Cesium.Color.DODGERBLUE;
+    if (focus === "erosion")   return Cesium.Color.DARKRED;
+    return Cesium.Color.LIGHTGRAY;
+  }
+
+  function applyScoreToColor(color, score) {
+    const s = Math.max(0, Math.min(1, Number(score) || 0));
+    return color.withAlpha(0.25 + 0.65 * s); // 0.25..0.90
+  }
+
+  // ============================
+  // COLOR RAMPS (numeric metrics)
+  // ============================
+  function clamp01(x){ return Math.max(0, Math.min(1, x)); }
+
+  function lerpColor(c1, c2, t){
+    const out = new Cesium.Color();
+    Cesium.Color.lerp(c1, c2, clamp01(t), out);
+    return out;
+  }
+
+  const RAMP = {
+    runoff:      { lo: Cesium.Color.LIGHTBLUE.withAlpha(0.60), hi: Cesium.Color.NAVY.withAlpha(0.85), legend: "linear-gradient(to right,#ccc,#81D4FA,#29B6F6,#0277BD,#0D47A1)" },
+    sediment:    { lo: Cesium.Color.MISTYROSE.withAlpha(0.60), hi: Cesium.Color.DARKRED.withAlpha(0.85), legend: "linear-gradient(to right,#fee,#fbb,#f66,#c00,#6b0000)" },
+    groundwater: { lo: Cesium.Color.LIGHTCYAN.withAlpha(0.60), hi: Cesium.Color.DARKSLATEBLUE.withAlpha(0.85), legend: "linear-gradient(to right,#e0ffff,#9be7ff,#4db6ff,#1565c0,#0d2a6b)" },
+    vegetation:  { lo: Cesium.Color.PALEGREEN.withAlpha(0.55), hi: Cesium.Color.DARKGREEN.withAlpha(0.85), legend: "linear-gradient(to right,#e8f5e9,#a5d6a7,#66bb6a,#2e7d32,#0b3d18)" },
+  };
+
+  const DELTA = {
+    neg: Cesium.Color.DARKRED.withAlpha(0.80),
+    mid: Cesium.Color.WHITE.withAlpha(0.20),
+    pos: Cesium.Color.DARKGREEN.withAlpha(0.80),
+    legend: "linear-gradient(to right,#6b0000,#ff6b6b,#ffffff,#7ee081,#0b3d18)"
+  };
+
+  function metricLabel(metric){
+    if(metric === "runoff") return "Runoff (Annual)";
+    if(metric === "sediment") return "Sediment (Annual)";
+    if(metric === "groundwater") return "Recharge (Annual)";
+    if(metric === "vegetation") return "Vegetation / ET (Annual)";
+    if(metric === "decision") return "Decision: Best Intervention";
+    return metric;
+  }
+
+  function computeRange(metricName, scenarioName) {
+    const a = getActiveSubbasinLayerInfo();
+    if (!a.ds || !scenarioData || !isActiveSwatLayer()) return {min:0, max:1};
+    const vals = [];
+
+    a.ds.entities.values.forEach(e => {
+      const id = e.subbasinId;
+      if (id == null) return;
+      const v = getScenarioMetricValue(id, scenarioName, metricName);
+      if (Number.isFinite(v)) vals.push(v);
+    });
+
+    if (vals.length < 3) return {min:0, max:1};
+    vals.sort((a,b)=>a-b);
+
+    const p5  = vals[Math.floor(0.05*(vals.length-1))];
+    const p95 = vals[Math.floor(0.95*(vals.length-1))];
+    if (p5 === p95) return {min:p5-1, max:p95+1};
+    return {min:p5, max:p95};
+  }
+
+  // ============================
+  // MAP STYLING (metric + decision)
+  // ============================
+  function applyDecisionMap() {
+    const a = getActiveSubbasinLayerInfo();
+    if (!a.ds || !scenarioData || !isActiveSwatLayer()) {
+      // Decision map relies on scenario-derived priority packs (SWAT 71 only)
+      legendPanel.style.display = "block";
+      legendTitle.textContent = "Decision Map";
+      legendSubtitle.textContent = "Available only for SWAT 71 sub-basins";
+      legendGradient.style.background = "linear-gradient(to right,#777,#777)";
+      legendLabels.innerHTML = `<span>N/A</span>`;
+      return;
+    }
+
+    const scenarioName = scenarioSelect.value;
+    const whatifLabel = getActiveWhatifKey(1);
+
+    legendPanel.style.display = "block";
+    legendTitle.textContent = "Decision Map (Best Focus)";
+    legendSubtitle.textContent = `Scenario: ${scenarioName} | What-if: ${whatifLabel}`;
+    legendGradient.style.background = "linear-gradient(to right,#ff9800,#9c27b0,#2196f3,#b71c1c)";
+    legendLabels.innerHTML = `<span>Marab</span><span>Vallerani</span><span>Recharge/Erosion</span>`;
+
+    const entities = a.ds.entities.values;
+
+    entities.forEach(e => {
+      if (!e.polygon) return;
+      const id = e.subbasinId;
+      if (id == null) { e.polygon.material = Cesium.Color.BLACK.withAlpha(0.25); return; }
+
+      const pack = getPriorityPack(id);
+      if (!pack) { e.polygon.material = Cesium.Color.BLACK.withAlpha(0.25); return; }
+
+      const focus = pack.sum?.best_focus;   // marab/vallerani/recharge/erosion
+      const score = pack.sum?.best_score;   // 0..1
+
+      const baseCol = focusColor(focus);
+      e.polygon.material = applyScoreToColor(baseCol, score);
+
+      // Keep the same subtle outline style (don't imply data meaning by outlines)
+      if (e.polyline) {
+        e.polyline.material = SUB_STYLE.outline;
+        e.polyline.width = SUB_STYLE.outlineWidth;
+      }
+    });
+  }
+
+  function applyNumericMap(metricName) {
+    const a = getActiveSubbasinLayerInfo();
+    if (!a.ds) return;
+
+    // Scenario styling is only meaningful for the SWAT 71 layer.
+    const useScenario = !!scenarioData && isActiveSwatLayer() && scenarioSelect && metricName && scenarioSelect.value && whatifSelect;
+
+    // Determine legend and value sources.
+    let scenarioName, whatifLabel, range;
+    legendPanel.style.display = 'block';
+
+    if (useScenario) {
+      scenarioName = scenarioSelect.value;
+      whatifLabel = getActiveWhatifKey(1);
+      range = computeRange(metricName, scenarioName);
+      legendTitle.textContent = (isDeltaMode ? (isPercentMode ? `%Δ ${metricLabel(metricName)} vs Baseline` : `Δ ${metricLabel(metricName)} vs Baseline`) : metricLabel(metricName));
+      legendSubtitle.textContent = `Scenario: ${scenarioName} | What-if: ${whatifLabel}`;
+      if (isDeltaMode) {
+        legendGradient.style.background = DELTA.legend;
+        legendLabels.innerHTML = isPercentMode ? `<span>Negative %</span><span>0%</span><span>Positive %</span>` : `<span>Negative</span><span>0</span><span>Positive</span>`;
+      } else {
+        legendGradient.style.background = (RAMP[metricName]?.legend || RAMP.runoff.legend);
+        legendLabels.innerHTML = `<span>Low</span><span>Avg</span><span>High</span>`;
+      }
+    } else {
+      // Static annual data coloring (no scenario). MetricName must be 'runoff' or 'sediment'
+      legendTitle.textContent = metricLabel(metricName);
+      legendSubtitle.textContent = 'Annual values (SWAT or Proxy)';
+      // Use simple blue-red gradient similar to RAMP.runoff
+      legendGradient.style.background = (RAMP[metricName]?.legend || RAMP.runoff.legend);
+      legendLabels.innerHTML = `<span>Low</span><span>Avg</span><span>High</span>`;
+      // Set range from precomputed subMetricRanges
+      const rr = getActiveSubMetricRanges();
+      if (metricName === 'runoff' && rr.runoff?.min != null) {
+        range = { min: rr.runoff.min, max: rr.runoff.max };
+      } else if (metricName === 'sediment' && rr.sediment?.min != null) {
+        range = { min: rr.sediment.min, max: rr.sediment.max };
+      } else {
+        range = { min: 0, max: 1 };
+      }
+    }
+
+    const entities = a.ds.entities.values;
+
+    entities.forEach(e => {
+      if (!e.polygon) return;
+      let v;
+
+      if (useScenario) {
+        const id = e.subbasinId;
+        if (id == null) { e.polygon.material = Cesium.Color.BLACK.withAlpha(0.25); return; }
+        v = getScenarioMetricValue(id, scenarioName, metricName);
+      } else {
+        // Pull values directly from entity properties for static annual dataset
+        if (metricName === 'runoff') {
+          v = propVal(e.properties, 'runoff_y');
+        } else if (metricName === 'sediment') {
+          v = propVal(e.properties, 'sed_y');
+        } else {
+          v = null;
+        }
+      }
+
+      if (!Number.isFinite(Number(v))) {
+        e.polygon.material = Cesium.Color.BLACK.withAlpha(0.25);
+        return;
+      }
+
+      v = Number(v);
+
+      if (useScenario && isDeltaMode) {
+        const span = Math.max(Math.abs(range.min), Math.abs(range.max), 1e-6);
+        const t = clamp01((v + span) / (2 * span));
+        let col;
+        if (t < 0.5) col = lerpColor(DELTA.neg, DELTA.mid, t / 0.5);
+        else         col = lerpColor(DELTA.mid, DELTA.pos, (t - 0.5) / 0.5);
+        e.polygon.material = col;
+      } else {
+        const denom = (range.max - range.min);
+        const t = denom > 0 ? clamp01((v - range.min) / denom) : 0.5;
+        const ramp = RAMP[metricName] || RAMP.runoff;
+        e.polygon.material = lerpColor(ramp.lo, ramp.hi, t);
+      }
+
+      // Outline via clamped polyline (constant pixel width; subtle dark gray)
+      if (e.polyline) {
+        e.polyline.material = SUB_STYLE.outline;
+        e.polyline.width = SUB_STYLE.outlineWidth;
+      }
+    });
+  }
+
+  function applyMapStyle() {
+    const metricName = metricSelect.value;
+
+    if (metricName === "decision") {
+      applyDecisionMap();
+      return;
+    }
+
+    applyNumericMap(metricName);
+  }
+
+  function resetSubbasinColors() {
+    const a = getActiveSubbasinLayerInfo();
+    if (!a.ds) return;
+    a.ds.entities.values.forEach(e => {
+      if (e.polygon && e.originalColor) {
+        e.polygon.material = e.originalColor;
+      }
+      // Restore subtle default outlines (in case heatmap/decision map changed them).
+      if (e.polyline && e._outlineDefaultMaterial) {
+        e.polyline.material = e._outlineDefaultMaterial;
+        e.polyline.width = e._outlineDefaultWidth || SUB_STYLE.outlineWidth;
+      }
+    });
+    legendPanel.style.display = "none";
+  }
+
+  // ============================
+  // LAYERS
+  // ============================
+  const layers = {};
+
+  // ============================
+  // SUBBASINS (SWAT 71 vs ALL 429)
+  // ============================
+  let subbasinsRawCache = null;   // raw GeoJSON from disk
+  let subbasinsNormCache = null;  // normalized (WGS84 + fixed axis/order)
+  let subbasinsNormKey = null;    // key for the reference center used
+
+  const subMetricRangesByLayer = {
+    swatSubbasins: { runoff: { min: null, max: null }, sediment: { min: null, max: null } },
+    allSubbasins:  { runoff: { min: null, max: null }, sediment: { min: null, max: null } }
+  };
+
+  function refKey(ref) {
+    if (!ref) return "expected";
+    const lon = Number(ref.lon); const lat = Number(ref.lat);
+    if (!Number.isFinite(lon) || !Number.isFinite(lat)) return "expected";
+    return `${lon.toFixed(5)},${lat.toFixed(5)}`;
+  }
+
+  function getActiveSubbasinLayerInfo() {
+    if (layers['swatSubbasins'] && layers['swatSubbasins'].show) return { id: 'swatSubbasins', ds: layers['swatSubbasins'] };
+    if (layers['allSubbasins'] && layers['allSubbasins'].show)  return { id: 'allSubbasins',  ds: layers['allSubbasins'] };
+    // legacy (older HTMLs)
+    if (layers['subbasins'] && layers['subbasins'].show) return { id: 'subbasins', ds: layers['subbasins'] };
+    return { id: null, ds: null };
+  }
+
+  function isActiveSwatLayer() {
+    const a = getActiveSubbasinLayerInfo();
+    return a.id === 'swatSubbasins' || a.id === 'subbasins';
+  }
+
+  function getActiveSubMetricRanges() {
+    const a = getActiveSubbasinLayerInfo();
+    if (!a.id) return subMetricRanges;
+    return subMetricRangesByLayer[a.id] || subMetricRanges;
+  }
+
+  async function toggleSubbasinMode(mode, checked) {
+    const swatChk = document.getElementById('swatSubChk');
+    const allChk  = document.getElementById('allSubChk');
+
+    // User request: allow BOTH checkboxes to be turned OFF (so the user can
+    // view raw terrain / imagery / buildings without subbasin polygons).
+    // We keep the layers mutually exclusive ONLY when turning one ON.
+
+    if (mode === 'swat') {
+      if (checked) {
+        // Turning SWAT ON -> force ALL OFF
+        if (allChk) allChk.checked = false;
+        await toggleLayer('allSubbasins', false);
+        await toggleLayer('swatSubbasins', true);
+      } else {
+        // Turning SWAT OFF -> allow both OFF
+        await toggleLayer('swatSubbasins', false);
+      }
+    } else if (mode === 'all') {
+      if (checked) {
+        // Turning ALL ON -> force SWAT OFF
+        if (swatChk) swatChk.checked = false;
+        await toggleLayer('swatSubbasins', false);
+        await toggleLayer('allSubbasins', true);
+      } else {
+        // Turning ALL OFF -> allow both OFF
+        await toggleLayer('allSubbasins', false);
+      }
+    }
+
+    // If both are OFF, hide the legend + disable heatmap styling.
+    const anyOn = (swatChk && swatChk.checked) || (allChk && allChk.checked);
+    if (!anyOn) {
+      try { legendPanel.style.display = 'none'; } catch(_) {}
+      heatmapOn = false;
+      subStatus.textContent = 'off';
+      subStatus.className = 'warn';
+    } else {
+      // Keep the status line consistent when toggling back on.
+      subStatus.textContent = (swatChk && swatChk.checked) ? 'SWAT 71 ✅' : 'ALL 429 ✅';
+      subStatus.className = 'ok';
+    }
+  }
+
+  async function toggleLayer(id, isVisible) {
+    // Backward-compatibility: old UI used 'subbasins'. Treat it as SWAT 71.
+    const targetId = (id === 'subbasins') ? 'swatSubbasins' : id;
+
+    // Do not lazy-load a layer when simply hiding it.
+    if (!isVisible) {
+      if (layers[targetId]) layers[targetId].show = false;
+      return;
+    }
+
+    if (!layers[targetId]) {
+      if (targetId === 'basin') await loadBasinLayer();
+      else if (targetId === 'rivers') await loadRiverLayer();
+      else if (targetId === 'dams') await loadDamsLayer();
+      else if (targetId === 'sites') await loadSitesLayer();
+      else if (targetId === 'swatSubbasins') await loadSwatSubbasinsLayer();
+      else if (targetId === 'allSubbasins') await loadAllSubbasinsLayer();
+      else if (targetId === 'buildings') await loadBuildingsLayer();
+      else if (targetId === 'floodStations') await loadFloodStationsLayer();
+    }
+
+    if (layers[targetId]) layers[targetId].show = true;
+    if (targetId === 'basin') viewer.flyTo(layers[targetId], { offset: new Cesium.HeadingPitchRange(0, -0.7, 5000) });
+  }
+
+  async function reloadLayersForNewReference(layerIds) {
+    // When we detect a CRS/order issue and re-normalize the basin, other layers
+    // must be reloaded using the updated basinRefCenter so everything stays aligned.
+    for (const id of layerIds) {
+      const targetId = (id === 'subbasins') ? 'swatSubbasins' : id;
+      if (!layers[targetId]) continue;
+      const wasVisible = !!layers[targetId].show;
+      try { viewer.dataSources.remove(layers[targetId], true); } catch (_) {}
+      layers[targetId] = null;
+      if (wasVisible) {
+        await toggleLayer(targetId, true);
+      }
+    }
+  }
+
+  function getFeatureSource(f) {
+    const s = (f && f.properties) ? (f.properties.source ?? f.properties.Source ?? f.properties.SOURCE) : null;
+    const txt = String(s ?? '').trim().toUpperCase();
+    return txt;
+  }
+
+  function guessSubIdFromFeature(f) {
+    const p = f?.properties || {};
+    const raw = p.subbasinId ?? p.SUB ?? p.Subbasin ?? p.subbasin ?? p.sub_id ?? p.SUB_ID;
+    const n = Number(raw);
+    return Number.isFinite(n) ? Math.round(n) : null;
+  }
+
+  function isSwatFeature(f) {
+    const src = getFeatureSource(f);
+    if (src) return src === 'SWAT';
+    // Fallback: if the export forgot the source field, approximate SWAT by SUB id <= 71
+    const id = guessSubIdFromFeature(f);
+    return Number.isFinite(id) ? (id <= 71) : false;
+  }
+
+  async function getNormalizedFullSubbasins() {
+    const key = refKey(basinRefCenter || EXPECTED_CENTER);
+    if (subbasinsNormCache && subbasinsNormKey === key) return subbasinsNormCache;
+
+    if (!subbasinsRawCache) {
+      const url = withCacheBust(SUBBASINS_FULL_GEOJSON);
+      const resp = await fetch(url);
+      if (!resp.ok) throw new Error(`HTTP ${resp.status} for ${url}`);
+      subbasinsRawCache = await resp.json();
+    }
+
+    subbasinsNormCache = normalizeGeoJSON(subbasinsRawCache, "subbasins", basinRefCenter || EXPECTED_CENTER);
+    subbasinsNormKey = key;
+    return subbasinsNormCache;
+  }
+
+  function buildSubbasinsFeatureCollection(normObj, filterFn) {
+    if (!filterFn) return normObj;
+    const feats = (normObj?.features || []).filter(filterFn);
+    // Clone only the subset to keep memory/cpu low (SWAT layer is small).
+    return { type: "FeatureCollection", features: JSON.parse(JSON.stringify(feats)) };
+  }
+
+  // Sub-basin styling when colors are NOT used to encode a metric.
+  // - SWAT 71: neutral light fill
+  // - ALL 429: two-tone (SWAT vs PROXY)
+  // - Subtle thin dark-gray outline (constant pixel width)
+  const SUB_STYLE = {
+    outline: Cesium.Color.fromCssColorString('#4a4a4a').withAlpha(0.55),
+    outlineWidth: 1,
+    swatFill: Cesium.Color.fromCssColorString('#cfd8dc').withAlpha(0.18),
+    allSwatFill: Cesium.Color.fromCssColorString('#b2dfdb').withAlpha(0.18),
+    allProxyFill: Cesium.Color.fromCssColorString('#cfd8dc').withAlpha(0.12),
+    hoverOutline: Cesium.Color.YELLOW.withAlpha(0.95),
+    hoverWidth: 3
+  };
+
+  async function loadSubbasinsFilteredLayer(layerId, filterFn, labelForStatus) {
+    try {
+      // Ensure basin loads first so it provides a stable reference center for normalization.
+      if (!basinRefCenter && !layers['basin']) {
+        await loadBasinLayer();
+      }
+
+      const norm = await getNormalizedFullSubbasins();
+      subbasinsRefCenter = norm.center || bboxCenter(norm.bbox || geojsonBbox(norm.obj));
+
+      const fc = buildSubbasinsFeatureCollection(norm.obj, filterFn);
+      const resource = await Cesium.GeoJsonDataSource.load(fc, {
+        // We draw our own subtle outlines with PolylineGraphics (below), so keep GeoJSON strokes off.
+        stroke: Cesium.Color.TRANSPARENT,
+        strokeWidth: 1,
+        fill: Cesium.Color.TRANSPARENT,
+        clampToGround: true
+      });
+
+      const entities = resource.entities.values;
+      let valid = 0;
+      const unique = new Set();
+
+      let _minRun = Infinity;
+      let _maxRun = -Infinity;
+      let _minSed = Infinity;
+      let _maxSed = -Infinity;
+
+      function normalizeSubId(x) {
+        if (x == null) return null;
+        const n = Number(x);
+        if (Number.isFinite(n)) return String(Math.round(n));
+        const s = String(x).trim();
+        return s ? s : null;
+      }
+
+      const now = Cesium.JulianDate.now();
+      entities.forEach((entity) => {
+        if (!entity.polygon) return;
+
+        if (entity.properties && entity.properties.subbasinId) {
+          entity.subbasinId = entity.properties.subbasinId.getValue();
+        } else if (entity.properties && entity.properties.SUB) {
+          entity.subbasinId = entity.properties.SUB.getValue();
+        } else if (entity.properties && entity.properties.Subbasin) {
+          entity.subbasinId = entity.properties.Subbasin.getValue();
+        } else {
+          entity.subbasinId = null;
+        }
+
+        entity.subbasinId = normalizeSubId(entity.subbasinId);
+        if (entity.subbasinId != null) valid += 1;
+
+        const id = entity.subbasinId;
+        if (id != null && id !== "") unique.add(String(id));
+
+        // Neutral styling (no implied data meaning)
+        // - SWAT layer: one neutral fill
+        // - ALL layer: two-tone based on properties.source (SWAT vs PROXY)
+        const src = String(propVal(entity.properties, 'source') || '').trim().toUpperCase();
+        const idNum = Number(id);
+        const isSwat = (src === 'SWAT') || (!src && Number.isFinite(idNum) && idNum <= 71);
+        let fillCol;
+        if (layerId === 'allSubbasins') {
+          fillCol = isSwat ? SUB_STYLE.allSwatFill : SUB_STYLE.allProxyFill;
+        } else {
+          fillCol = SUB_STYLE.swatFill;
+        }
+        entity.originalColor = fillCol;
+
+        entity.polygon.material = entity.originalColor;
+        entity.polygon.outline = false;
+
+        // Draw a clamped outline polyline (constant pixel width; avoids Cesium terrain outline warnings)
+        try {
+          const h = entity.polygon.hierarchy?.getValue?.(now);
+          const positions = h?.positions;
+          if (positions && positions.length) {
+            // Close the ring so the outline is continuous
+            const closed = positions.slice();
+            if (closed.length > 1) {
+              const first = closed[0];
+              const last = closed[closed.length - 1];
+              if (!Cesium.Cartesian3.equals(first, last)) closed.push(first);
+            }
+            entity.polyline = new Cesium.PolylineGraphics({
+              positions: closed,
+              width: SUB_STYLE.outlineWidth,
+              material: SUB_STYLE.outline,
+              clampToGround: true
+            });
+            entity._outlineDefaultMaterial = SUB_STYLE.outline;
+            entity._outlineDefaultWidth = SUB_STYLE.outlineWidth;
+          }
+        } catch (_) {}
+
+        entity.label = new Cesium.LabelGraphics({
+          text: id != null ? `SUB ${id}` : "SUB ?",
+          show: false,
+          font: "14px sans-serif",
+          fillColor: Cesium.Color.WHITE,
+          outlineColor: Cesium.Color.BLACK,
+          outlineWidth: 4,
+          style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+          verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+          pixelOffset: new Cesium.Cartesian2(0, -12),
+          disableDepthTestDistance: Number.POSITIVE_INFINITY
+        });
+
+        // Track annual ranges from properties (works for SWAT and PROXY)
+        const props = entity.properties || {};
+
+        let r = props.runoff_y;
+        if (r && typeof r.getValue === 'function') r = r.getValue(now);
+        r = Number(r);
+        if (Number.isFinite(r)) {
+          if (r < _minRun) _minRun = r;
+          if (r > _maxRun) _maxRun = r;
+        }
+
+        let s = props.sed_y;
+        if (s && typeof s.getValue === 'function') s = s.getValue(now);
+        s = Number(s);
+        if (Number.isFinite(s)) {
+          if (s < _minSed) _minSed = s;
+          if (s > _maxSed) _maxSed = s;
+        }
+      });
+
+      if (Number.isFinite(_minRun) && Number.isFinite(_maxRun)) {
+        subMetricRangesByLayer[layerId] = subMetricRangesByLayer[layerId] || { runoff: {}, sediment: {} };
+        subMetricRangesByLayer[layerId].runoff = { min: _minRun, max: _maxRun };
+      }
+      if (Number.isFinite(_minSed) && Number.isFinite(_maxSed)) {
+        subMetricRangesByLayer[layerId] = subMetricRangesByLayer[layerId] || { runoff: {}, sediment: {} };
+        subMetricRangesByLayer[layerId].sediment = { min: _minSed, max: _maxSed };
+      }
+
+      viewer.dataSources.add(resource);
+      layers[layerId] = resource;
+
+      const distTxt = (basinRefCenter && Number.isFinite(norm.distKmToRef)) ? `, Δ≈${norm.distKmToRef.toFixed(1)}km` : '';
+      subStatus.textContent = `loaded (${labelForStatus}: ${entities.length} features${distTxt})`;
+      const aligned = (!basinRefCenter || !Number.isFinite(norm.distKmToRef) || norm.distKmToRef < 25);
+      subStatus.className = aligned ? 'ok' : 'warn';
+
+      // If still far apart, the basin layer may be the one with wrong CRS/order.
+      if (basinRefCenter && subbasinsRefCenter && Number.isFinite(norm.distKmToRef) && norm.distKmToRef > 25 && !alignmentRetryDone) {
+        alignmentRetryDone = true;
+        console.warn(`⚠️ Basin/subbasins look misaligned (Δ≈${norm.distKmToRef.toFixed(1)} km). Retrying basin normalization using subbasins as reference...`);
+        await reloadBasinWithReference(subbasinsRefCenter);
+        // Re-normalize other layers using the updated basin reference so points/lines align.
+        await reloadLayersForNewReference(['rivers','dams','sites','floodStations','buildings']);
+      }
+
+      if (!hoverHandlerInstalled) {
+        installHoverHandler();
+        hoverHandlerInstalled = true;
+      }
+
+      // If heatmap is already enabled, re-apply styling to the active subbasins layer.
+      if (heatmapOn) applyMapStyle();
+
+      // Only fly-to on first load to avoid constant camera jumps.
+      if (layerId === 'swatSubbasins' && !viewer.camera._subbasinsFlyDone) {
+        viewer.camera._subbasinsFlyDone = true;
+        viewer.flyTo(resource);
+      }
+    } catch (e) {
+      console.error("Error loading subbasins", e);
+      subStatus.textContent = 'FAILED ❌';
+      subStatus.className = 'bad';
+      alert(`Failed to load ${SUBBASINS_FULL_GEOJSON}. Put it next to index.html and run with Live Server.`);
+    }
+  }
+
+  async function loadSwatSubbasinsLayer() {
+    console.log("⏳ Loading SWAT subbasins (71) from:", SUBBASINS_FULL_GEOJSON);
+    await loadSubbasinsFilteredLayer('swatSubbasins', isSwatFeature, 'SWAT 71');
+  }
+
+  async function loadAllSubbasinsLayer() {
+    console.log("⏳ Loading ALL subbasins (429) from:", SUBBASINS_FULL_GEOJSON);
+    await loadSubbasinsFilteredLayer('allSubbasins', null, 'All 429');
+  }
+
+  // Legacy name (older sidebar checkbox)
+  async function loadSubbasinsLayer() {
+    await loadSwatSubbasinsLayer();
+  }
+
+  function installHoverHandler() {
+    viewer.screenSpaceEventHandler.setInputAction(function(movement) {
+      const picked = viewer.scene.pick(movement.endPosition);
+
+      // Reset previous hover styling
+      if (lastHover && lastHover.subbasinId != null) {
+        if (lastHover.polyline && lastHover._outlineDefaultMaterial) {
+          lastHover.polyline.material = lastHover._outlineDefaultMaterial;
+          lastHover.polyline.width = lastHover._outlineDefaultWidth || SUB_STYLE.outlineWidth;
+        }
+        // Labels are shown only for the *selected* sub-basin (click), not on hover.
+        if (lastHover.label && lastHover !== selectedSubbasinEntity) lastHover.label.show = false;
+      } else if (lastHover && lastHover.label) {
+        // Non-subbasin hover labels (e.g., desert dams)
+        lastHover.label.show = false;
+      }
+
+      if (Cesium.defined(picked) && picked.id) {
+        const e = picked.id;
+
+        // Subbasins hover
+        if (e.subbasinId != null) {
+          hoverStatus.textContent = `SUB ${e.subbasinId}`;
+          hoverStatus.className = 'ok';
+
+          if (e.polyline) {
+            e.polyline.material = SUB_STYLE.hoverOutline;
+            e.polyline.width = SUB_STYLE.hoverWidth;
+          }
+          lastHover = e;
+          return;
+        }
+
+        // Desert dam hover
+        if (e.assetType === 'desert_dam') {
+          hoverStatus.textContent = `Desert Dam`;
+          hoverStatus.className = 'ok';
+          if (e.label) e.label.show = true;
+          lastHover = e;
+          return;
+        }
+      }
+
+      // Nothing found
+      hoverStatus.textContent = 'none';
+      hoverStatus.className = 'warn';
+      lastHover = null;
+
+    }, Cesium.ScreenSpaceEventType.MOUSE_MOVE);
+  }
+
+  async function loadBasinLayer() {
+    try {
+      // Load the official Mujib basin boundary instead of the SWAT-dissolved boundary.
+      const url = withCacheBust('basin_OFFICIAL.geojson');
+      const resp = await fetch(url);
+      if (!resp.ok) throw new Error(`HTTP ${resp.status} for ${url}`);
+      const raw = await resp.json();
+      const norm = normalizeGeoJSON(raw, "basin");
+      basinRefCenter = norm.center || bboxCenter(norm.bbox || geojsonBbox(norm.obj));
+      basinRefBbox = norm.bbox || geojsonBbox(norm.obj);
+      const res = await Cesium.GeoJsonDataSource.load(norm.obj, { clampToGround: true });
+      res.entities.values.forEach(e => {
+        if (e.polygon) {
+          const now = Cesium.JulianDate.now();
+          const h = e.polygon.hierarchy?.getValue?.(now);
+          const positions = h?.positions;
+          if (positions && positions.length) {
+            const closed = positions.slice();
+            if (closed.length > 1) {
+              const first = closed[0];
+              const last = closed[closed.length - 1];
+              if (!Cesium.Cartesian3.equals(first, last)) closed.push(first);
+            }
+            // Constant pixel width basin boundary (doesn't grow when zooming)
+            e.polyline = new Cesium.PolylineGraphics({
+              positions: closed,
+              width: 2,
+              material: Cesium.Color.DARKORANGE.withAlpha(0.95),
+              clampToGround: true
+            });
+          }
+          // Keep polygon invisible (boundary is shown via polyline above)
+          e.polygon.material = Cesium.Color.TRANSPARENT;
+          e.polygon.outline = false;
+        }
+      });
+      console.log(`✅ Basin boundary loaded; normalize: ${norm.note}`);
+      if (basinRefCenter) {
+        console.log(`📌 Basin reference center: lon=${basinRefCenter.lon.toFixed(5)}, lat=${basinRefCenter.lat.toFixed(5)}`);
+      }
+      viewer.dataSources.add(res); layers['basin'] = res;
+    } catch (e) { console.error("Basin load error", e); }
+  }
+
+  async function reloadBasinWithReference(refCenter) {
+    // If basin/subbasins look far apart, try re-normalizing the basin using subbasins as reference.
+    try {
+      if (layers['basin']) {
+        try { viewer.dataSources.remove(layers['basin'], true); } catch (_) {}
+        layers['basin'] = null;
+      }
+
+      const url = withCacheBust('basin_OFFICIAL.geojson');
+      const resp = await fetch(url);
+      if (!resp.ok) throw new Error(`HTTP ${resp.status} for ${url}`);
+      const raw = await resp.json();
+      const norm = normalizeGeoJSON(raw, "basin", refCenter || null);
+      basinRefCenter = norm.center || bboxCenter(norm.bbox || geojsonBbox(norm.obj));
+      basinRefBbox = norm.bbox || geojsonBbox(norm.obj);
+
+      const res = await Cesium.GeoJsonDataSource.load(norm.obj, { clampToGround: true });
+      res.entities.values.forEach(e => {
+        if (e.polygon) {
+          const now = Cesium.JulianDate.now();
+          const h = e.polygon.hierarchy?.getValue?.(now);
+          const positions = h?.positions;
+          if (positions && positions.length) {
+            const closed = positions.slice();
+            if (closed.length > 1) {
+              const first = closed[0];
+              const last = closed[closed.length - 1];
+              if (!Cesium.Cartesian3.equals(first, last)) closed.push(first);
+            }
+            e.polyline = new Cesium.PolylineGraphics({
+              positions: closed,
+              width: 2,
+              material: Cesium.Color.DARKORANGE.withAlpha(0.95),
+              clampToGround: true
+            });
+          }
+          e.polygon.material = Cesium.Color.TRANSPARENT;
+          e.polygon.outline = false;
+        }
+      });
+      viewer.dataSources.add(res);
+      layers['basin'] = res;
+      console.log(`🔁 Basin reloaded using reference; normalize: ${norm.note}`);
+      if (basinRefCenter) {
+        console.log(`📌 Basin reference center (after reload): lon=${basinRefCenter.lon.toFixed(5)}, lat=${basinRefCenter.lat.toFixed(5)}`);
+      }
+    } catch (e) {
+      console.warn('Basin reload attempt failed:', e);
+    }
+  }
+
+  async function loadRiverLayer() {
+    try {
+      const url = withCacheBust('rivers.json');
+      const resp = await fetch(url);
+      if (!resp.ok) throw new Error(`HTTP ${resp.status} for ${url}`);
+      const raw = await resp.json();
+      const norm = normalizeGeoJSON(raw, "rivers", basinRefCenter || EXPECTED_CENTER);
+      const res = await Cesium.GeoJsonDataSource.load(norm.obj, { clampToGround: true });
+
+      // Render rivers with constant pixel width (PolylineGraphics), so width does NOT grow/shrink with zoom.
+      res.entities.values.forEach(e => {
+        if (e.polyline) {
+          e.polyline.material = Cesium.Color.CYAN.withAlpha(0.8);
+          e.polyline.width = 2; // constant pixels
+          e.polyline.clampToGround = true;
+        }
+        // If any corridors exist in the source style, remove them.
+        if (e.corridor) e.corridor = undefined;
+      });
+      console.log(`✅ River network loaded; normalize: ${norm.note}`);
+      viewer.dataSources.add(res); layers['rivers'] = res;
+    } catch (e) { console.error("Rivers load error", e); }
+  }
+  // ============================
+  // FLOOD STATIONS (GeoJSON)
+  // ============================
+  async function loadFloodStationsLayer() {
+    try {
+      const url = withCacheBust(FLOOD_STATIONS_GEOJSON);
+      const resp = await fetch(url);
+      if (!resp.ok) throw new Error(`HTTP ${resp.status} for ${url}`);
+      const raw = await resp.json();
+      const norm = normalizeGeoJSON(raw, "floodStations", basinRefCenter || EXPECTED_CENTER);
+      const res = await Cesium.GeoJsonDataSource.load(norm.obj, { clampToGround: true });
+
+      res.entities.values.forEach(e => {
+        // Style point features
+        if (e.position) {
+          e.billboard = undefined;
+          e.point = {
+            pixelSize: 10,
+            color: Cesium.Color.RED.withAlpha(0.9),
+            outlineColor: Cesium.Color.BLACK,
+            outlineWidth: 2,
+            heightReference: Cesium.HeightReference.CLAMP_TO_GROUND
+          };
+        }
+
+        // Optional label (hidden by default)
+        const p = e.properties;
+        const name =
+          (p?.Station?.getValue?.() ?? p?.station?.getValue?.() ??
+           p?.Name?.getValue?.() ?? p?.name?.getValue?.() ??
+           p?.ID?.getValue?.() ?? p?.id?.getValue?.() ?? "Flood Station");
+
+        e.label = new Cesium.LabelGraphics({
+          text: String(name),
+          show: false,
+          font: "12px sans-serif",
+          fillColor: Cesium.Color.WHITE,
+          outlineColor: Cesium.Color.BLACK,
+          outlineWidth: 3,
+          pixelOffset: new Cesium.Cartesian2(0, -14),
+          disableDepthTestDistance: Number.POSITIVE_INFINITY
+        });
+
+        // ✅ Tag for click-details panel
+        e.assetType = "flood_station";
+        e.assetId = (p?.Station_Id?.getValue?.() ?? p?.Station_ID?.getValue?.() ?? p?.ID?.getValue?.() ?? null);
+        e.assetName = (p?.Station_Na?.getValue?.() ?? p?.Station_Name?.getValue?.() ?? p?.Name?.getValue?.() ?? "Flood Station");
+      });
+
+      viewer.dataSources.add(res);
+      layers['floodStations'] = res;
+
+      console.log("✅ Flood Stations loaded:", res.entities.values.length);
+    } catch (e) {
+      console.error("❌ Flood Stations load error", e);
+      alert(`Failed to load ${FLOOD_STATIONS_GEOJSON}. Put it next to index.html and run with Live Server.`);
+    }
+  }
+
+  // ============================
+// DAMS (GeoJSON)
+// ============================
+async function loadDamsLayer() {
+  try {
+    const url = withCacheBust(DAMS_GEOJSON);
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status} for ${url}`);
+    const raw = await resp.json();
+    const norm = normalizeGeoJSON(raw, "dams", basinRefCenter || EXPECTED_CENTER);
+    const res = await Cesium.GeoJsonDataSource.load(norm.obj, { clampToGround: true });
+
+    // Solid, readable styling on satellite imagery
+    // Earth-tone styling (dark brown fill + light brown highlight)
+    const DAM_FILL = Cesium.Color.fromCssColorString("#5D4037");     // dark brown
+    const DAM_OUTLINE = Cesium.Color.fromCssColorString("#5D4037");  // match fill (no border)
+
+    res.entities.values.forEach(e => {
+      // Points
+      if (e.position) {
+        e.billboard = undefined;
+        e.point = {
+          pixelSize: 10,
+          color: DAM_FILL.withAlpha(1.0),
+          outlineColor: DAM_OUTLINE.withAlpha(1.0),
+          outlineWidth: 0,
+          heightReference: Cesium.HeightReference.CLAMP_TO_GROUND
+        };
+      }
+
+      // Polygons
+      if (e.polygon) {
+        e.polygon.material = DAM_FILL.withAlpha(0.98);
+        // Avoid Cesium terrain-outline warnings; draw a clamped polyline outline instead
+        e.polygon.outline = false;
+        try {
+          const now = Cesium.JulianDate.now();
+          const h = e.polygon.hierarchy?.getValue?.(now);
+          const positions = h?.positions;
+          if (positions && positions.length) {
+            e.polyline = new Cesium.PolylineGraphics({
+              positions,
+              width: 3,
+              material: DAM_OUTLINE.withAlpha(0.98),
+              clampToGround: true
+            });
+          }
+        } catch (err) { /* ignore */ }
+      }
+
+      // Polylines
+      if (e.polyline) {
+        e.polyline.material = DAM_OUTLINE.withAlpha(0.98);
+        e.polyline.width = 0;
+        e.polyline.clampToGround = true;
+        e.polyline.show = false; // remove border
+      }
+
+      // ✅ Tag for click-details panel
+      e.assetType = "dam";
+      const p = e.properties;
+
+      e.assetId = (p?.NODE_ID?.getValue?.() ?? p?.Node_ID?.getValue?.() ?? p?.ID?.getValue?.() ?? null);
+
+      // --- Name extraction + override (Wala Dam) ---
+      const rawEn = (p?.En_name?.getValue?.() ?? p?.EN_NAME?.getValue?.() ?? "");
+      const rawAr = (p?.Ar_Name?.getValue?.() ?? p?.AR_NAME?.getValue?.() ?? "");
+      const rawNm = (p?.Name?.getValue?.() ?? p?.NAME?.getValue?.() ?? "");
+
+      const en = String(rawEn || "").trim();
+      const ar = String(rawAr || "").trim();
+      const nm = String(rawNm || "").trim();
+
+      // Normalize Arabic (remove spaces + tatweel + diacritics)
+      const arNorm = String(ar || nm).replace(/[\s\u0640\u064B-\u065F\u0670]/g, "");
+
+      // Prefer English names (decision-makers); keep Arabic available for details
+      function isArabicString(s){ return /[\u0600-\u06FF]/.test(String(s||"")); }
+
+      let englishName = en;
+
+      // Wala special-case (handles different Arabic spellings)
+      if (!englishName && (
+        arNorm.includes("سدالواله") || arNorm.includes("سدالوالة") ||
+        arNorm.includes("الواله")   || arNorm.includes("الوالة")
+      )) {
+        englishName = "Wala Dam";
+      }
+
+      // Explicit override map (Arabic -> English)
+      if (!englishName && ar && DAM_EN_NAME_OVERRIDE[ar]) {
+        englishName = DAM_EN_NAME_OVERRIDE[ar];
+      }
+
+      // If "Name" is already Latin (not Arabic), use it
+      if (!englishName && nm && !isArabicString(nm)) {
+        englishName = nm;
+      }
+
+      // Fallback: English generic label
+      if (!englishName) {
+        englishName = e.assetId ? `Dam ${e.assetId}` : "Dam";
+      }
+
+      e.assetName = englishName;
+      e.assetNameAr = (ar && isArabicString(ar)) ? ar : (isArabicString(nm) ? nm : "");
+    });
+
+    viewer.dataSources.add(res);
+    layers["dams"] = res;
+
+    console.log("✅ Dams loaded:", res.entities.values.length, `normalize: ${norm.note}`);
+  } catch (e) {
+    console.error("❌ Dams load error", e);
+    alert(`Failed to load ${DAMS_GEOJSON}. Put it next to index.html and run with Live Server.`);
+  }
+}
+
+  
+  // ============================
+  // DESERT DAMS INVENTORY (GeoJSON points)
+  // ============================
+  async function loadSitesLayer() {
+    try {
+      const url = withCacheBust(DESERT_DAMS_GEOJSON);
+      const resp = await fetch(url);
+      if (!resp.ok) throw new Error(`HTTP ${resp.status} for ${url}`);
+      const raw = await resp.json();
+      const norm = normalizeGeoJSON(raw, "desertDams", basinRefCenter || EXPECTED_CENTER);
+      const res = await Cesium.GeoJsonDataSource.load(norm.obj, { clampToGround: true });
+
+      res.entities.values.forEach(e => {
+        // Style points (gold)
+        if (e.position) {
+          e.billboard = undefined;
+          e.point = {
+            pixelSize: 11,
+            color: Cesium.Color.GOLD.withAlpha(0.95),
+            outlineColor: Cesium.Color.BLACK.withAlpha(0.85),
+            outlineWidth: 2,
+            heightReference: Cesium.HeightReference.CLAMP_TO_GROUND
+          };
+        }
+
+        // Hidden label (optional)
+        const p = e.properties;
+        const nm = (p?.Dam_Name?.getValue?.() ?? p?.DAM_NAME?.getValue?.() ?? p?.Name?.getValue?.() ?? p?.NAME?.getValue?.() ?? 'Desert Dam');
+
+        e.label = new Cesium.LabelGraphics({
+          text: String(nm),
+          show: false,
+          font: '12px sans-serif',
+          fillColor: Cesium.Color.WHITE,
+          outlineColor: Cesium.Color.BLACK,
+          outlineWidth: 3,
+          pixelOffset: new Cesium.Cartesian2(0, -14),
+          disableDepthTestDistance: Number.POSITIVE_INFINITY
+        });
+
+        // ✅ Tag for click-details panel
+        e.assetType = 'desert_dam';
+        e.assetId = (p?.WH_No?.getValue?.() ?? p?.WH_NO?.getValue?.() ?? p?.ID?.getValue?.() ?? null);
+        e.assetName = String(nm);
+      });
+
+      viewer.dataSources.add(res);
+      layers['sites'] = res;
+
+      console.log('✅ Desert Dams (Inventory) loaded:', res.entities.values.length);
+    } catch (e) {
+      console.error('❌ Desert Dams load error', e);
+      alert(`Failed to load ${DESERT_DAMS_GEOJSON}. Put it next to index.html and run with Live Server.`);
+    }
+  }
+
+// ============================
+  // LOD1 BUILDINGS (GeoJSON -> 3D extrusion)
+  // ============================
+  async function loadBuildingsLayer() {
+    // Buildings availability varies by dataset version (clipped vs full). Try the most complete
+    // candidates first, then fall back to the configured filename.
+    const BUILDING_FILE_CANDIDATES = [
+      'mujib_lod1.geojson',
+      'mujib_lod1_simplified.geojson',
+      LOD1_BUILDINGS_GEOJSON
+    ];
+
+    let raw = null;
+    let pickedFile = null;
+
+    for (const fn of BUILDING_FILE_CANDIDATES) {
+      try {
+        const urlTry = withCacheBust(fn);
+        const respTry = await fetch(urlTry);
+        if (respTry.ok) {
+          raw = await respTry.json();
+          pickedFile = fn;
+          break;
+        }
+      } catch (_) {}
+    }
+
+    console.log("⏳ Loading LoD1 buildings:", pickedFile || LOD1_BUILDINGS_GEOJSON);
+
+    try {
+      if (!raw) {
+        const url = withCacheBust(LOD1_BUILDINGS_GEOJSON);
+        throw new Error(`No buildings GeoJSON found (last tried: ${url})`);
+      }
+
+      const norm = normalizeGeoJSON(raw, "buildings", basinRefCenter || EXPECTED_CENTER);
+      const ds = await Cesium.GeoJsonDataSource.load(norm.obj, { clampToGround: true });
+
+      const entities = ds.entities.values;
+
+      function getPropNumber(props, key) {
+        if (!props || !props[key]) return null;
+        const v = props[key];
+        const x = (typeof v.getValue === "function")
+          ? v.getValue(Cesium.JulianDate.now())
+          : v;
+        const n = Number(x);
+        return Number.isFinite(n) ? n : null;
+      }
+
+      function getFirstPropNumber(props, keys) {
+        for (const k of keys) {
+          const n = getPropNumber(props, k);
+          if (Number.isFinite(n)) return { n, key: k };
+        }
+        return { n: null, key: null };
+      }
+
+      let extruded = 0;
+
+      for (const e of entities) {
+        if (!e.polygon) continue;
+
+        const props = e.properties;
+
+        // Height defaults: prefer explicit height, else derive from levels, else fallback.
+        let h = null;
+        let hSrc = null;
+
+        const hh = getFirstPropNumber(props, [
+          'height','Height','HEIGHT','building_height','Building_Height','bldg_h','bldgHeight'
+        ]);
+        if (Number.isFinite(hh.n)) {
+          h = hh.n;
+          hSrc = hh.key;
+        }
+
+        if (!Number.isFinite(h)) {
+          const lv = getFirstPropNumber(props, [
+            'levels','Levels','LEVELS','building:levels','BUILDING_LEVELS','floors','Floors','FLOORS','num_levels','NUM_LEVELS'
+          ]);
+          if (Number.isFinite(lv.n)) {
+            // Typical storey height ~3m
+            h = Math.max(3, lv.n * 3.0);
+            hSrc = `${lv.key}×3m`;
+          }
+        }
+
+        if (!Number.isFinite(h)) { h = 10; hSrc = "default (10m)"; }
+
+        const now = Cesium.JulianDate.now();
+
+        function flattenHierarchy(h) {
+          if (!h || !h.positions) return h;
+          const flatPositions = h.positions.map((p) => {
+            const c = Cesium.Cartographic.fromCartesian(p);
+            return Cesium.Cartesian3.fromRadians(c.longitude, c.latitude, 0.0);
+          });
+          const flatHoles = (h.holes || []).map((hole) => flattenHierarchy(hole));
+          return new Cesium.PolygonHierarchy(flatPositions, flatHoles);
+        }
+
+        try {
+          const hierarchy = e.polygon.hierarchy && e.polygon.hierarchy.getValue
+            ? e.polygon.hierarchy.getValue(now)
+            : e.polygon.hierarchy;
+          if (hierarchy && hierarchy.positions && hierarchy.positions.length) {
+            e.polygon.hierarchy = flattenHierarchy(hierarchy);
+          }
+        } catch (err) {}
+
+        e.polygon.perPositionHeight = false;
+
+        e.polygon.height = 0.0;
+        e.polygon.heightReference = Cesium.HeightReference.CLAMP_TO_GROUND;
+
+        e.polygon.extrudedHeight = h;
+        e.polygon.extrudedHeightReference = Cesium.HeightReference.RELATIVE_TO_GROUND;
+
+        e.polygon.outline = false;
+        e.polygon.material = Cesium.Color.LIGHTGRAY.withAlpha(0.75);
+
+        // ✅ Tag for click-details panel (show building height)
+        e.assetType = "building";
+        e.buildingHeight = h;
+        e.heightSource = hSrc;
+        e.assetId = propAny(props, ["id","ID","identificatie","Identificatie","bag_id","BAG_ID","pand_id","Pand_ID","pandid","PANDID","building_id","Building_ID"]);
+        const bName = propAny(props, ["name","Name","building_name","Building_Name","pandnaam","PandNaam"]);
+        e.assetName = bName || (e.assetId ? ("Building " + e.assetId) : "Building");
+
+
+        extruded += 1;
+      }
+
+      viewer.dataSources.add(ds);
+      layers["buildings"] = ds;
+
+      console.log(`✅ LoD1 buildings loaded: ${entities.length} entities (${extruded} extruded)`);
+
+      viewer.scene.globe.depthTestAgainstTerrain = false;
+
+      await viewer.flyTo(ds, { offset: new Cesium.HeadingPitchRange(0, -0.55, 9000) });
+
+    } catch (e) {
+      console.error("Buildings load error", e);
+      alert(
+        "Failed to load LoD1 buildings.\n" +
+        "1) Put 'mujib_lod1.geojson' next to index.html\n" +
+        "2) Run using Live Server (not file://)\n" +
+        "3) If it is too heavy, try 'mujib_lod1_simplified.geojson' or 3D Tiles."
+      );
+    }
+  }
+
+  // ============================
+  // MAP TOGGLE (Δ alternates for numeric metrics only)
+  // ============================
+  function toggleHeatmap() {
+    const a = getActiveSubbasinLayerInfo();
+    if (!a.ds) { alert("Subbasins are still loading..."); return; }
+
+    heatmapOn = !heatmapOn;
+
+    if (heatmapOn) {
+      // Delta mode only makes sense for SWAT 71 + scenario JSON.
+      const canDelta = !!scenarioData && isActiveSwatLayer() && (metricSelect.value !== "decision");
+      isDeltaMode = canDelta ? !isDeltaMode : false;
+      applyMapStyle();
+    } else {
+      resetSubbasinColors();
+    }
+  }
+
+  // ============================
+  // CHART + CONTROLS
+  // ============================
+  function refreshAll() {
+    if (currentSubbasinId != null) {
+      updateSubInfoLine(currentSubbasinId);
+      updateKpisForSubbasin(currentSubbasinId);
+      updateRankLists();
+
+      if (activeChartTab === "climate") {
+        showClimateForSubbasin(currentSubbasinId);
+      } else {
+        updateChart(currentSubbasinId);
+      }
+    }
+    if (heatmapOn) {
+      const vm = (document.getElementById("viewModeSelect")?.value) || "absolute";
+      isDeltaMode = (vm !== "absolute");
+      isPercentMode = (vm === "pct");
+      if (metricSelect.value === "decision") { isDeltaMode = false; isPercentMode = false; }
+      applyMapStyle();
+    }
+  }
+
+  
+  // ============================
+  // SUBBASIN INFO + KPI + RANKING (Decision-support)
+  // ============================
+  function getViewMode() {
+    return (document.getElementById("viewModeSelect")?.value) || "absolute";
+  }
+
+  function fmtSigned(x, digits=1) {
+    if (!Number.isFinite(x)) return "—";
+    const s = (x > 0) ? "+" : (x < 0 ? "−" : "");
+    const v = Math.abs(x).toFixed(digits);
+    return s + v;
+  }
+
+  async function updateSubInfoLine(subId) {
+    const el = document.getElementById("subInfoLine");
+    if (!el) return;
+
+    await loadSubLocations().catch(()=>{});
+    await loadSubPlacesOptional().catch(()=>{});
+
+    const loc = SUB_LOC ? SUB_LOC[String(subId)] : null;
+    const latlon = loc ? `${Number(loc.lat).toFixed(5)}, ${Number(loc.lon).toFixed(5)}` : "—";
+
+    // Optional place/admin
+    const pl = (SUB_PLACE && SUB_PLACE[String(subId)]) ? SUB_PLACE[String(subId)] : null;
+    const place = pl?.place || pl?.name || null;
+    const admin = pl?.admin || pl?.governorate || pl?.district || null;
+
+    const parts = [
+      `Subbasin ${subId}`,
+      `Lat/Lon: ${latlon}`
+    ];
+    if (place) parts.push(`Near: ${place}`);
+    if (admin) parts.push(`${admin}`);
+
+    el.textContent = parts.join(" • ");
+  }
+
+  function updateKpisForSubbasin(subId) {
+    const row = document.getElementById("kpiRow");
+    const kR = document.getElementById("kpiRunoff");
+    const kS = document.getElementById("kpiSediment");
+    const kG = document.getElementById("kpiRecharge");
+    if (!row || !kR || !kS || !kG) return;
+
+    const hasHydro = !!(scenarioData && scenarioData[`Subbasin_${subId}`]);
+    if (!hasHydro) { row.style.display = "none"; return; }
+
+    const vm = getViewMode();
+    const sc = scenarioSelect.value;
+
+    const baseRun = getAnnualValue(subId, "baseline", "runoff");
+    const baseSed = getAnnualValue(subId, "baseline", "sediment");
+    const baseGwd = getAnnualValue(subId, "baseline", "groundwater");
+
+    const selRun = getAnnualValue(subId, sc, "runoff");
+    const selSed = getAnnualValue(subId, sc, "sediment");
+    const selGwd = getAnnualValue(subId, sc, "groundwater");
+
+    function changeText(base, sel, label, unit, digitsAbs=1, digitsPct=1) {
+      if (!Number.isFinite(base) || !Number.isFinite(sel)) return `${label}: —`;
+      if (vm === "absolute") return `${label}: ${Number(sel).toFixed(digitsAbs)}${unit}`;
+      const d = Number(sel) - Number(base);
+      if (vm === "delta") return `${label}: ${fmtSigned(d, digitsAbs)}${unit}`;
+      if (Math.abs(Number(base)) < 1e-9) return `${label}: —`;
+      const p = (d / Number(base)) * 100.0;
+      return `${label}: ${fmtSigned(p, digitsPct)}%`;
+    }
+
+    kR.textContent = changeText(baseRun, selRun, "Runoff", " mm", 1, 1);
+    kS.textContent = changeText(baseSed, selSed, "Sediment", " t/ha", 2, 1);
+    kG.textContent = changeText(baseGwd, selGwd, "Recharge", " mm", 1, 1);
+
+    row.style.display = "flex";
+  }
+
+  function updateRankLists() {
+    const rankPanel = document.getElementById("rankPanel");
+    const winEl = document.getElementById("topWinners");
+    const loseEl = document.getElementById("topLosers");
+    if (!rankPanel || !winEl || !loseEl) return;
+
+    const vm = getViewMode();
+    const metric = metricSelect.value;
+
+    // Only meaningful for scenario-enabled metrics
+    if (vm === "absolute" || metric === "decision" || !scenarioData) {
+      rankPanel.style.display = "none";
+      winEl.innerHTML = "";
+      loseEl.innerHTML = "";
+      return;
+    }
+
+    const sc = scenarioSelect.value;
+
+    // Build list from scenarioData keys (SWAT 71 only)
+    const ids = Object.keys(scenarioData || {})
+      .filter(k => k.startsWith("Subbasin_"))
+      .map(k => Number(k.replace("Subbasin_", "")))
+      .filter(n => Number.isFinite(n));
+
+    const vals = [];
+    for (const id of ids) {
+      const v = getScenarioMetricValue(id, sc, metric);
+      if (Number.isFinite(v)) vals.push({ id, v: Number(v) });
+    }
+
+    if (vals.length < 3) {
+      rankPanel.style.display = "none";
+      winEl.innerHTML = "";
+      loseEl.innerHTML = "";
+      return;
+    }
+
+    vals.sort((a,b)=>a.v-b.v);
+    const losers = vals.slice(0, 10);
+    const winners = vals.slice(-10).reverse();
+
+    const unit = (vm === "pct") ? "%" : (metric === "sediment" ? " t/ha" : " mm");
+
+    function li(x){
+      const vtxt = (vm === "pct") ? `${fmtSigned(x.v, 1)}%` : `${fmtSigned(x.v, (metric === "sediment" ? 2 : 1))}${unit}`;
+      return `<li>SUB ${x.id}: <span style="color:#fff; font-weight:700;">${vtxt}</span></li>`;
+    }
+
+    winEl.innerHTML = winners.map(li).join("");
+    loseEl.innerHTML = losers.map(li).join("");
+
+    rankPanel.style.display = "block";
+  }
+
+
+  // ============================
+  // CLIMATE (ERA5) PANEL
+  // ============================
+
+  function setChartTab(tabName) {
+    activeChartTab = tabName;
+
+    const hydroBtn = document.getElementById("tabHydrology");
+    const climBtn  = document.getElementById("tabClimate");
+    const hydroTab = document.getElementById("hydrologyTab");
+    const climTab  = document.getElementById("climateTab");
+
+    if (tabName === "climate") {
+      if (hydroBtn) hydroBtn.classList.remove("active");
+      if (climBtn)  climBtn.classList.add("active");
+      if (hydroTab) hydroTab.style.display = "none";
+      if (climTab)  climTab.style.display = "block";
+      if (currentSubbasinId != null) showClimateForSubbasin(currentSubbasinId);
+    } else {
+      if (climBtn)  climBtn.classList.remove("active");
+      if (hydroBtn) hydroBtn.classList.add("active");
+      if (climTab)  climTab.style.display = "none";
+      if (hydroTab) hydroTab.style.display = "block";
+    }
+  }
+
+  async function loadERA5Climate() {
+    if (era5ClimateCache) return era5ClimateCache;
+    if (era5ClimatePromise) return era5ClimatePromise;
+
+    era5ClimatePromise = (async () => {
+      const url = withCacheBust(ERA5_CLIMATE_JSON);
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`);
+      era5ClimateCache = await res.json();
+      console.log("✅ ERA5 climate JSON loaded:", Object.keys(era5ClimateCache || {}).length, "subbasins");
+      return era5ClimateCache;
+    })();
+
+    return era5ClimatePromise;
+  }
+
+  function climateClassFromPct(pct) {
+    const p = Number(pct);
+    if (!Number.isFinite(p)) return { label: "—", tone: "neutral" };
+    if (p >= 90) return { label: "Very wet", tone: "wet" };
+    if (p >= 80) return { label: "Wet", tone: "wet" };
+    if (p <= 10) return { label: "Very dry", tone: "dry" };
+    if (p <= 20) return { label: "Dry", tone: "dry" };
+    return { label: "Near normal", tone: "neutral" };
+  }
+
+  function pill(text, tone="neutral") {
+    const el = document.createElement("div");
+    el.className = "climatePill";
+    el.textContent = text;
+
+    // Professional, subtle tints (no loud colors)
+    if (tone === "wet") {
+      el.style.borderColor = "rgba(102,252,241,0.45)";
+      el.style.color = "#66fcf1";
+      el.style.background = "rgba(102,252,241,0.10)";
+    } else if (tone === "dry") {
+      el.style.borderColor = "rgba(255,204,128,0.55)";
+      el.style.color = "#ffcc80";
+      el.style.background = "rgba(255,204,128,0.10)";
+    }
+    return el;
+  }
+
+  function destroyClimateChart() {
+    try { if (climateChart) climateChart.destroy(); } catch(_) {}
+    climateChart = null;
+  }
+
+function updateClimateChart(months, p, clim, anom) {
+    const ctx = document.getElementById("climateChart").getContext("2d");
+
+    // Keep charts readable: show last ~10 years (120 months) if available
+    const n = months.length;
+    const k = Math.max(0, n - 120);
+
+    const x = months.slice(k);
+    const pS = p.slice(k);
+    const cS = clim.slice(k);
+    const aS = anom.slice(k);
+
+    destroyClimateChart();
+
+    climateChart = new Chart(ctx, {
+      data: {
+        labels: x,
+        datasets: [
+          {
+            type: "bar",
+            label: "Monthly P (mm)",
+            data: pS,
+            backgroundColor: "rgba(102,252,241,0.22)",
+            borderColor: "rgba(102,252,241,0.65)",
+            borderWidth: 1,
+            yAxisID: "yP"
+          },
+          {
+            type: "line",
+            label: "Climatology (mm)",
+            data: cS,
+            borderColor: "rgba(197,198,199,0.85)",
+            borderWidth: 2,
+            pointRadius: 0,
+            tension: 0.25,
+            yAxisID: "yP"
+          },
+          {
+            type: "line",
+            label: "Anomaly (mm)",
+            data: aS,
+            borderColor: "rgba(255,204,128,0.85)",
+            borderWidth: 2,
+            pointRadius: 0,
+            tension: 0.25,
+            yAxisID: "yA"
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            labels: { color: "#c5c6c7" }
+          },
+          tooltip: {
+            mode: "index",
+            intersect: false
+          }
+        },
+        interaction: { mode: "index", intersect: false },
+        scales: {
+          x: {
+            ticks: { color: "#aab", maxRotation: 0, autoSkip: true, maxTicksLimit: 12 },
+            grid: { color: "rgba(255,255,255,0.06)" }
+          },
+          yP: {
+            position: "left",
+            title: { display: true, text: "Rainfall (mm/month)", color: "#c5c6c7" },
+            ticks: { color: "#c5c6c7" },
+            grid: { color: "rgba(255,255,255,0.06)" }
+          },
+          yA: {
+            position: "right",
+            title: { display: true, text: "Anomaly (mm)", color: "#c5c6c7" },
+            ticks: { color: "#c5c6c7" },
+            grid: { drawOnChartArea: false }
+          }
+        }
+      }
+    });
+  }
+
+async function showClimateForSubbasin(subId) {
+    const statusEl = document.getElementById("climateStatus");
+    const pillsEl = document.getElementById("climatePills");
+
+    // Clear pills
+    if (pillsEl) pillsEl.innerHTML = "";
+
+    try {
+      const data = await loadERA5Climate();
+
+      // Add lat/lon context (ALL 429)
+      await loadSubLocations().catch(()=>{});
+      const loc = SUB_LOC ? SUB_LOC[String(subId)] : null;
+      const locTxt = loc ? `Lat/Lon: ${Number(loc.lat).toFixed(5)}, ${Number(loc.lon).toFixed(5)} • ` : "";
+      const key = String(subId);
+      const d = data?.[key];
+
+      if (!d || !d.month || !d.month.length) {
+        destroyClimateChart();
+        if (statusEl) statusEl.textContent = `ERA5 climate is not available for sub-basin ${subId} (no grid overlap in the processed mosaic).`;
+        if (pillsEl) pillsEl.appendChild(pill(`SUB ${subId}`));
+        return;
+      }
+
+      const n = d.month.length - 1;
+      const latestMonth = d.month[n];
+      const latestP = d.p?.[n];
+      const latestAnom = d.anom?.[n];
+      const latestPct = d.pct?.[n];
+
+      const cls = climateClassFromPct(latestPct);
+
+      if (statusEl) {
+        const pTxt = Number.isFinite(Number(latestP)) ? `${Number(latestP).toFixed(1)} mm` : "—";
+        const aVal = Number(latestAnom);
+        const aTxt = Number.isFinite(aVal) ? `${aVal >= 0 ? "+" : ""}${aVal.toFixed(1)} mm` : "—";
+        const pctVal = Number(latestPct);
+        const pctTxt = Number.isFinite(pctVal) ? `${pctVal.toFixed(0)}th pct` : "—";
+        statusEl.textContent = `Latest: ${latestMonth} • P ${pTxt} • Anom ${aTxt} • ${pctTxt}`;
+      }
+
+      if (pillsEl) {
+        pillsEl.appendChild(pill(`SUB ${subId}`));
+        pillsEl.appendChild(pill(cls.label, cls.tone));
+        pillsEl.appendChild(pill("Source: ERA5"));
+        pillsEl.appendChild(pill("View: last 10 years"));
+      }
+
+      updateClimateChart(d.month, d.p || [], d.clim || [], d.anom || []);
+    } catch (err) {
+      console.error("ERA5 climate error:", err);
+      destroyClimateChart();
+      if (statusEl) statusEl.textContent = "Could not load ERA5 climate JSON. Ensure 'era5_precip_monthly_ALL429_compact.json' is next to this HTML file and served via Live Server.";
+      if (pillsEl) pillsEl.appendChild(pill(`SUB ${subId}`));
+    }
+  }
+
+
+  function updateChart(subbasinId) {
+    if (!scenarioData) { alert("Scenario data still loading..."); return; }
+
+    const metric = metricSelect.value;
+    const chartMetric = (metric === "decision") ? "runoff" : metric;
+
+    updateSubInfoLine(subbasinId);
+    updateKpisForSubbasin(subbasinId);
+    updateRankLists();
+
+    const pack = getWhatifObject(subbasinId);
+    const wKey = pack?.wKey || "dP0_dT0";
+    const wObj = pack?.wObj;
+    const node = pack?.node;
+
+    const monthly = wObj?.monthly || node?.monthly;
+
+    const sNames = ["baseline", "marab", "vallerani", "combined"];
+    const colors = {
+      baseline: "#FBC02D",
+      marab: "#66BB6A",
+      vallerani: "#29B6F6",
+      combined: "#AB47BC"
+    };
+
+    const labels = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+    const datasets = sNames.map(s => ({
+      label: `${s.toUpperCase()} (${wKey})`,
+      data: monthly?.[s]?.[chartMetric] || [],
+      borderColor: colors[s],
+      backgroundColor: colors[s] + "22",
+      tension: 0.35,
+      fill: false
+    }));
+
+    const title = `SUB ${subbasinId} | ${chartMetric.toUpperCase()} | what-if ${wKey}`;
+
+    const ctx = document.getElementById('swatChart').getContext('2d');
+    if (myChart) myChart.destroy();
+
+    myChart = new Chart(ctx, {
+      type: 'line',
+      data: { labels, datasets },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          title: { display: true, text: title, color: 'white', font: { size: 14 } },
+          legend: { labels: { color: 'white' } }
+        },
+        scales: {
+          y: { ticks: { color:'#ccc' }, grid: { color:'#333' } },
+          x: { ticks: { color:'#ccc' }, grid: { color:'#333' } }
+        }
+      }
+    });
+  }
+
+  // ============================
+  // CLICK INTERACTION (subbasins + assets)
+  // ============================
+  viewer.screenSpaceEventHandler.setInputAction(function onLeftClick(movement) {
+    // drillPick so buildings don't block clicks
+    // Increase drillPick limit so buildings remain pickable under subbasin polygons.
+    const picks = viewer.scene.drillPick(movement.position, 50);
+
+    let asset = null;
+    let building = null;
+    let sub = null;
+
+    for (const p of picks) {
+      const e = p?.id;
+      if (!e) continue;
+
+      if (e.assetType === "flood_station" || e.assetType === "dam" || e.assetType === "desert_dam") {
+        asset = e;
+        break; // prioritize assets over subbasins
+      }
+
+      if (e.assetType === "building" && !building) {
+        building = e;
+      }
+
+      if (e.subbasinId != null && !sub) {
+        sub = e;
+      }
+    }
+
+    // 1) Assets
+    if (asset) {
+      viewer.selectedEntity = asset;
+
+      if (asset.assetType === "flood_station") {
+        clickStatus.textContent = `Flood Station ${asset.assetId || ''}`.trim();
+        clickStatus.className = 'ok';
+        renderFloodStationPanel(asset);
+        return;
+      }
+
+      if (asset.assetType === "dam") {
+        clickStatus.textContent = `Dam ${asset.assetId || ''}`.trim();
+        clickStatus.className = 'ok';
+        renderDamPanel(asset);
+        return;
+      }
+
+      if (asset.assetType === "desert_dam") {
+        clickStatus.textContent = `Desert Dam ${asset.assetId || ''}`.trim();
+        clickStatus.className = 'ok';
+        renderDesertDamPanel(asset);
+        return;
+      }
+    }
+
+    // 2) Buildings
+    if (building) {
+      viewer.selectedEntity = building;
+      const h = Number.isFinite(building.buildingHeight) ? building.buildingHeight : null;
+      clickStatus.textContent = `Building${h !== null ? (' • H ' + h + ' m') : ''}`;
+      clickStatus.className = 'ok';
+      renderBuildingPanel(building);
+      return;
+    }
+
+    // 3) Subbasins
+    if (sub && sub.subbasinId != null) {
+      // Labels are shown only for the selected sub-basin.
+      if (selectedSubbasinEntity && selectedSubbasinEntity.label) {
+        try { selectedSubbasinEntity.label.show = false; } catch (_) {}
+      }
+      selectedSubbasinEntity = sub;
+      if (selectedSubbasinEntity.label) {
+        selectedSubbasinEntity.label.show = true;
+      }
+
+      currentSubbasinId = sub.subbasinId;
+
+      // Subbasin info line (lat/lon + optional nearest place)
+      updateSubInfoLine(currentSubbasinId);
+
+      clickStatus.textContent = `SUB ${currentSubbasinId} ✅`;
+      clickStatus.className = 'ok';
+
+      hideAssetPanel();
+      // Chart panel (Hydrology + Climate)
+      document.getElementById('chartPanel').style.display = 'block';
+
+      // Hydrology scenarios exist only for Subbasin_1..Subbasin_71 (SWAT)
+      const hasHydro = !!(scenarioData && scenarioData[`Subbasin_${currentSubbasinId}`]);
+      const noticeEl = document.getElementById('hydrologyNotice');
+
+      if (noticeEl) noticeEl.style.display = hasHydro ? 'none' : 'block';
+
+      // KPI pills + winners/losers lists
+      updateKpisForSubbasin(currentSubbasinId);
+      updateRankLists();
+
+      if (hasHydro) {
+        // Default to Hydrology unless the user is already on Climate
+        if (activeChartTab !== 'climate') setChartTab('hydrology');
+        updateChart(currentSubbasinId);
+      } else {
+        // No SWAT time series for this subbasin -> keep Hydrology clean, switch to Climate
+        try { if (myChart) myChart.destroy(); } catch(_) {}
+        myChart = null;
+        setChartTab('climate');
+      }
+
+      // Always refresh Climate for the clicked subbasin (cached after first load)
+      showClimateForSubbasin(currentSubbasinId);
+      return;
+    }
+
+    // 3) Nothing useful picked
+    clickStatus.textContent = `none`;
+    clickStatus.className = 'warn';
+  }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+
+  // ============================
+  // CLIMATE FULL VIEW MODAL (reuse existing chart data; no re-fetch / no re-compute)
+  // ============================
+  let climateModalChart = null;
+
+  function __safeDeepClone(obj){
+    try { return JSON.parse(JSON.stringify(obj)); } catch { return obj; }
+  }
+
+  function __registerZoomPluginIfNeeded(){
+    try {
+      if (!window.Chart || typeof window.Chart.register !== "function") return;
+      const zp = window.ChartZoom || window["chartjs-plugin-zoom"] || window.ChartjsPluginZoom;
+      if (zp && !window.__zoomPluginRegistered) {
+        window.Chart.register(zp);
+        window.__zoomPluginRegistered = true;
+      }
+    } catch(_) {}
+  }
+
+  function openClimateModal(){
+    const overlay = document.getElementById("climateModal");
+    const bigCanvas = document.getElementById("climateChartBig");
+    if (!overlay || !bigCanvas) return;
+
+    if (!climateChart) {
+      alert("Climate chart is not ready yet. Click a sub-basin first.");
+      return;
+    }
+
+    __registerZoomPluginIfNeeded();
+
+    overlay.style.display = "flex";
+
+    try { if (climateModalChart) climateModalChart.destroy(); } catch(_) {}
+    climateModalChart = null;
+
+    const ctx = bigCanvas.getContext("2d");
+    const data = __safeDeepClone(climateChart.data);
+    const options = __safeDeepClone(climateChart.options) || {};
+
+    options.responsive = true;
+    options.maintainAspectRatio = false;
+
+    // Make axes readable in the large view
+    if (options.scales?.x?.ticks) {
+      options.scales.x.ticks.maxTicksLimit = 24;
+      options.scales.x.ticks.autoSkip = true;
+      options.scales.x.ticks.font = Object.assign({}, options.scales.x.ticks.font || {}, { size: 12 });
+    }
+    if (options.scales?.yP?.ticks) {
+      options.scales.yP.ticks.font = Object.assign({}, options.scales.yP.ticks.font || {}, { size: 12 });
+    }
+    if (options.scales?.yA?.ticks) {
+      options.scales.yA.ticks.font = Object.assign({}, options.scales.yA.ticks.font || {}, { size: 12 });
+    }
+    if (options.scales?.yP?.title) {
+      options.scales.yP.title.font = Object.assign({}, options.scales.yP.title.font || {}, { size: 13, weight: "600" });
+    }
+    if (options.scales?.yA?.title) {
+      options.scales.yA.title.font = Object.assign({}, options.scales.yA.title.font || {}, { size: 13, weight: "600" });
+    }
+
+    // Scroll / zoom friendly (modal only)
+    options.plugins = options.plugins || {};
+    options.plugins.zoom = {
+      pan: { enabled: true, mode: "x" },
+      zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: "x" },
+      limits: { x: { min: "original", max: "original" } }
+    };
+
+    climateModalChart = new Chart(ctx, { data, options });
+  }
+
+  function closeClimateModal(){
+    const overlay = document.getElementById("climateModal");
+    if (overlay) overlay.style.display = "none";
+    try { if (climateModalChart) climateModalChart.destroy(); } catch(_) {}
+    climateModalChart = null;
+  }
+
+  // ============================
+  // Response-based dynamic visualization (Rainfall → Runoff → Dam)
+  // Phase 1: animated river flow lines + key dam "inflow rise"
+  // ============================
+  let __simRainOn = false;
+  const __simCfg = {
+    rainFactor: 1.20,      // +20% rainfall scenario (toggle)
+    runoffElasticity: 1.75 // documented assumption: +20% P → +35% runoff (SWAT elasticity)
+  };
+  let __simDamOverlays = [];
+  let __riverTrailImg = null;
+
+  function __runoffFactorFromRainFactor(rainFactor){
+    const rf = Number(rainFactor);
+    const e = Number(__simCfg.runoffElasticity);
+    if (!Number.isFinite(rf) || !Number.isFinite(e)) return 1.0;
+    return 1.0 + (rf - 1.0) * e;
+  }
+
+  function __ensureTrailImage(){
+    if (__riverTrailImg) return __riverTrailImg;
+    try {
+      const c = document.createElement("canvas");
+      c.width = 64; c.height = 1;
+      const g = c.getContext("2d");
+      const grad = g.createLinearGradient(0,0,64,0);
+      grad.addColorStop(0.00, "rgba(255,255,255,0.0)");
+      grad.addColorStop(0.45, "rgba(255,255,255,0.25)");
+      grad.addColorStop(1.00, "rgba(255,255,255,1.0)");
+      g.fillStyle = grad;
+      g.fillRect(0,0,64,1);
+      __riverTrailImg = c.toDataURL("image/png");
+    } catch(_) {
+      __riverTrailImg = null;
+    }
+    return __riverTrailImg;
+  }
+
+  function __ensurePolylineTrailMaterial(){
+    if (!Cesium?.Material) return;
+    if (Cesium.Material.PolylineTrailType) return;
+
+    Cesium.Material.PolylineTrailType = "PolylineTrail";
+    Cesium.Material.PolylineTrailSource = `
+      czm_material czm_getMaterial(czm_materialInput materialInput)
+      {
+        czm_material material = czm_getDefaultMaterial(materialInput);
+        vec2 st = materialInput.st;
+        vec4 colorImage = texture(image, vec2(fract(st.s - time), st.t));
+        material.alpha = colorImage.a * color.a;
+        material.diffuse = color.rgb;
+        return material;
+      }`;
+
+    Cesium.Material._materialCache.addMaterial(Cesium.Material.PolylineTrailType, {
+      fabric: {
+        type: Cesium.Material.PolylineTrailType,
+        uniforms: {
+          color: new Cesium.Color(0.0, 1.0, 1.0, 0.85),
+          image: __ensureTrailImage(),
+          time: 0
+        },
+        source: Cesium.Material.PolylineTrailSource
+      },
+      translucent: function(){ return true; }
+    });
+
+    function PolylineTrailMaterialProperty(options){
+      this._definitionChanged = new Cesium.Event();
+      this.color = options?.color || Cesium.Color.CYAN.withAlpha(0.85);
+      this.speed = Number(options?.speed) || 0.18;
+      this.image = options?.image || __ensureTrailImage();
+    }
+    Object.defineProperties(PolylineTrailMaterialProperty.prototype, {
+      isConstant: { get: function(){ return false; } },
+      definitionChanged: { get: function(){ return this._definitionChanged; } }
+    });
+    PolylineTrailMaterialProperty.prototype.getType = function(){ return Cesium.Material.PolylineTrailType; };
+    PolylineTrailMaterialProperty.prototype.getValue = function(time, result){
+      if (!Cesium.defined(result)) result = {};
+      result.color = this.color;
+      result.image = this.image;
+      const seconds = (Cesium.JulianDate.toDate(time).getTime() / 1000.0);
+      result.time = (seconds * this.speed) % 1.0;
+      return result;
+    };
+    PolylineTrailMaterialProperty.prototype.equals = function(other){ return this === other; };
+
+    window.PolylineTrailMaterialProperty = PolylineTrailMaterialProperty;
+  }
+
+  function __setRiverFlowAnimation(enabled, runoffFactor){
+    const ds = layers["rivers"];
+    if (!ds) return;
+
+    if (enabled) __ensurePolylineTrailMaterial();
+
+    const f = Math.max(0.8, Math.min(2.5, Number(runoffFactor) || 1.0));
+    ds.entities.values.forEach(e => {
+      if (!e.polyline) return;
+
+      if (!e.__riverDefaultMaterial) e.__riverDefaultMaterial = e.polyline.material;
+      if (!e.__riverDefaultWidth) e.__riverDefaultWidth = e.polyline.width;
+
+      if (enabled && window.PolylineTrailMaterialProperty) {
+        e.polyline.material = new window.PolylineTrailMaterialProperty({
+          color: Cesium.Color.CYAN.withAlpha(0.85),
+          speed: 0.14 + 0.12 * (f - 1.0),
+          image: __ensureTrailImage()
+        });
+        const baseW = Number(e.__riverDefaultWidth) || 2;
+        e.polyline.width = Math.min(7, baseW + 6 * (f - 1.0));
+      } else {
+        e.polyline.material = e.__riverDefaultMaterial;
+        e.polyline.width = e.__riverDefaultWidth || 2;
+      }
+    });
+  }
+
+  function __clearDamOverlays(){
+    try { __simDamOverlays.forEach(ent => viewer.entities.remove(ent)); } catch(_) {}
+    __simDamOverlays = [];
+  }
+
+  function __pickKeyDams(damDs){
+    const all = (damDs?.entities?.values) || [];
+    const wala = all.filter(e => String(e.assetName || "").toLowerCase().includes("wala"));
+    if (wala.length) return wala.slice(0, 1);
+    return all.filter(e => !!e.position).slice(0, 3);
+  }
+
+  function __addDamOverlays(runoffFactor){
+    const damDs = layers["dams"];
+    if (!damDs) return;
+
+    __clearDamOverlays();
+
+    const dams = __pickKeyDams(damDs);
+    const now = Cesium.JulianDate.now();
+    const f = Math.max(0.8, Math.min(2.5, Number(runoffFactor) || 1.0));
+    const pct = Math.round((f - 1.0) * 100);
+
+    dams.forEach((e) => {
+      if (!e.position) return;
+
+      let pos = null;
+      try { pos = e.position.getValue ? e.position.getValue(now) : e.position; } catch(_) {}
+      if (!pos) return;
+
+      const carto = Cesium.Cartographic.fromCartesian(pos);
+      const lon = carto.longitude, lat = carto.latitude;
+      let baseH = viewer.scene.globe.getHeight(carto);
+      if (!Number.isFinite(baseH)) baseH = carto.height || 0;
+
+      const targetLen = 55 * f;  // meters (visual)
+      const startMs = (typeof performance !== "undefined" ? performance.now() : Date.now());
+
+      const overlay = viewer.entities.add({
+        polyline: {
+          positions: new Cesium.CallbackProperty(function(){
+            const nowMs = (typeof performance !== "undefined" ? performance.now() : Date.now());
+            const t = Math.min(1.0, Math.max(0.0, (nowMs - startMs) / 1200.0));
+            const cur = targetLen * t;
+            return [
+              Cesium.Cartesian3.fromRadians(lon, lat, baseH),
+              Cesium.Cartesian3.fromRadians(lon, lat, baseH + cur)
+            ];
+          }, false),
+          width: 10,
+          material: Cesium.Color.AQUA.withAlpha(0.70),
+          clampToGround: false
+        },
+        label: {
+          text: `${e.assetName || "Dam"} • inflow ${pct >= 0 ? "+" : ""}${pct}%`,
+          font: "12px sans-serif",
+          fillColor: Cesium.Color.WHITE,
+          outlineColor: Cesium.Color.BLACK,
+          outlineWidth: 3,
+          style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+          pixelOffset: new Cesium.Cartesian2(0, -20),
+          disableDepthTestDistance: Number.POSITIVE_INFINITY,
+          showBackground: true,
+          backgroundColor: Cesium.Color.BLACK.withAlpha(0.55),
+          backgroundPadding: new Cesium.Cartesian2(6, 4)
+        }
+      });
+
+      __simDamOverlays.push(overlay);
+    });
+  }
+
+  async function toggleRainResponseSimulation(){
+    __simRainOn = !__simRainOn;
+
+    if (__simRainOn) {
+      await toggleLayer("rivers", true);
+      await toggleLayer("dams", true);
+    }
+
+    const btn = document.getElementById("simRainBtn");
+    if (btn) {
+      btn.classList.toggle("active", __simRainOn);
+      btn.setAttribute("aria-pressed", __simRainOn ? "true" : "false");
+      btn.textContent = __simRainOn ? "Stop Sim" : "+20% Rain";
+      btn.title = __simRainOn ? "Stop simulation" : "Response-based simulation: Rainfall → Runoff → Dam";
+    }
+
+    const statusEl = document.getElementById("climateStatus");
+    if (statusEl && !statusEl.dataset.baseText) statusEl.dataset.baseText = statusEl.textContent || "";
+
+    if (__simRainOn) {
+      const runoffFactor = __runoffFactorFromRainFactor(__simCfg.rainFactor);
+      __setRiverFlowAnimation(true, runoffFactor);
+      __addDamOverlays(runoffFactor);
+      if (statusEl) statusEl.textContent = `Scenario: +20% rainfall → ~+${Math.round((runoffFactor-1)*100)}% runoff (SWAT elasticity). Rivers animate; key dam shows inflow rise.`;
+    } else {
+      __setRiverFlowAnimation(false, 1.0);
+      __clearDamOverlays();
+      if (statusEl) statusEl.textContent = statusEl.dataset.baseText || statusEl.textContent;
+    }
+  }
+
+  // Patch toggleLayer once to re-apply simulation visuals when a layer is toggled back on
+  (function(){
+    if (window.__toggleLayerPatched) return;
+    window.__toggleLayerPatched = true;
+
+    const __origToggleLayer = toggleLayer;
+    toggleLayer = async function(id, isVisible){
+      await __origToggleLayer(id, isVisible);
+      if (!__simRainOn) return;
+      const runoffFactor = __runoffFactorFromRainFactor(__simCfg.rainFactor);
+      if (id === "rivers" && isVisible) __setRiverFlowAnimation(true, runoffFactor);
+      if (id === "dams" && isVisible) __addDamOverlays(runoffFactor);
+    };
+  })();
+
+  // UI hooks (Option A: click anywhere on the chart to expand)
+  (function(){
+    const c = document.getElementById("climateChart");
+    if (c) {
+      c.style.cursor = "zoom-in";
+      c.addEventListener("click", openClimateModal);
+    }
+    const expandBtn = document.getElementById("climateExpandBtn");
+    if (expandBtn) expandBtn.addEventListener("click", openClimateModal);
+
+    const overlay = document.getElementById("climateModal");
+    const closeBtn = document.getElementById("climateModalClose");
+    if (closeBtn) closeBtn.addEventListener("click", closeClimateModal);
+    if (overlay) {
+      overlay.addEventListener("click", function(ev){
+        if (ev.target === overlay) closeClimateModal();
+      });
+    }
+    document.addEventListener("keydown", function(ev){
+      if (ev.key === "Escape") closeClimateModal();
+    });
+
+    const simBtn = document.getElementById("simRainBtn");
+    if (simBtn) simBtn.addEventListener("click", toggleRainResponseSimulation);
+  })();
+
+  // ============================
+  // UI Accordion + Init
+  // ============================
+  const acc = document.getElementsByClassName("category-btn");
+  for (let i = 0; i < acc.length; i++) {
+    acc[i].addEventListener("click", function() {
+      if (this.classList.contains('analysis-btn')) return;
+      this.classList.toggle("active");
+      const panel = this.nextElementSibling;
+      panel.style.maxHeight = panel.style.maxHeight ? null : panel.scrollHeight + "px";
+    });
+  }
+
+  // Load data + layers (sequential init ensures alignment: basin becomes the reference).
+  (async () => {
+    // Scenario JSON is optional for static runoff/sediment, but enables Δ mode + decision map.
+    loadScenarioData();
+
+    // Subbasin info (lat/lon + optional nearest place)
+    loadSubLocations().catch(console.error);
+    loadSubPlacesOptional().catch(()=>{});
+
+    // Basin first → use its center as CRS normalization reference for all other layers.
+    await toggleLayer('basin', true);
+    await toggleLayer('rivers', true);
+    await toggleLayer('dams', true);
+    await toggleLayer('sites', true);
+    await toggleLayer('swatSubbasins', true); // default
+    await toggleLayer('floodStations', true);
+
+    // Buildings are heavy; keep them optional for faster loading.
+    const bchk = document.getElementById('buildingsChk');
+    if (bchk && bchk.checked) {
+      await toggleLayer('buildings', true);
+    }
+  })();
+</script>
+</body>
+</html>
