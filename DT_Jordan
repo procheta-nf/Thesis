@@ -7,6 +7,11 @@
   <!-- Prevent 404 errors for the missing favicon during development -->
   <link rel="icon" href="data:,">
 
+  <!-- Premium UI typography (UI = Inter, Data = JetBrains Mono) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800;900&family=JetBrains+Mono:wght@400;600;800&display=swap" rel="stylesheet">
+
   <script src="https://cesium.com/downloads/cesiumjs/releases/1.114/Build/Cesium/Cesium.js"></script>
   <link href="https://cesium.com/downloads/cesiumjs/releases/1.114/Build/Cesium/Widgets/widgets.css" rel="stylesheet" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -21,6 +26,26 @@
   <style>
     * { box-sizing: border-box; }
 
+    /* ============================
+       Premium theme tokens
+       (Cyberpunk-minimalist / glass)
+       ============================ */
+    :root{
+      --accent: #66fcf1;
+      --bg-void: #0b0c10;
+      --bg-slate: rgba(15, 23, 42, 0.75);
+      --bg-slate-2: rgba(30, 41, 59, 0.45);
+      --stroke: rgba(255,255,255,0.10);
+      --stroke-2: rgba(255,255,255,0.06);
+      --text: rgba(229,231,235,0.92);
+      --muted: rgba(148,163,184,0.86);
+      --shadow: 0 14px 36px rgba(0,0,0,0.55);
+      --shadow-soft: 0 10px 26px rgba(0,0,0,0.38);
+      --radius-lg: 18px;
+      --radius-md: 14px;
+      --blur: 16px;
+    }
+
 /* Dark scrollbar styling (keeps scrolling enabled; matches dashboard theme) */
 * { scrollbar-width: thin; scrollbar-color: rgba(69,162,158,0.55) rgba(11,12,16,0.88); }
 *::-webkit-scrollbar{ width: 10px; height: 10px; }
@@ -32,15 +57,36 @@
 }
 *::-webkit-scrollbar-thumb:hover{ background-color: rgba(102,252,241,0.35); }
 
-    body { margin: 0; overflow: hidden; font-family: 'Roboto','Segoe UI',sans-serif; background:#0b0c10; }
+    body { margin: 0; overflow: hidden; font-family: 'Inter','Roboto','Segoe UI',sans-serif; background: var(--bg-void); color: var(--text); }
     button, input, select { font-family: inherit; }
     body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
 
+    /* Monospace “instrument” readouts (numbers/IDs/coordinates) */
+    .mono, #statusLine, .climatePill, .mwTemp, .mwNowMini, .kv .v{
+      font-family: 'JetBrains Mono','Roboto Mono',ui-monospace,Menlo,Consolas,monospace;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: 0.02em;
+    }
 
+
+    /* Floating glass sidebar card (map stays primary) */
     #sidebar{
-      position:absolute; top:0; left:0; width:340px; height:100vh;
-      background:#1f2833; color:#c5c6c7; z-index:10;
-      box-shadow:4px 0 10px rgba(0,0,0,0.5); display:flex; flex-direction:column;
+      position: fixed;
+      left: 16px;
+      top: calc(var(--topbar-h) + 16px);
+      width: 340px;
+      height: calc(100vh - var(--topbar-h) - 32px);
+      background: var(--bg-slate);
+      color: var(--text);
+      z-index: 9800;
+      border-radius: var(--radius-lg);
+      border: 1px solid var(--stroke);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(var(--blur));
+      -webkit-backdrop-filter: blur(var(--blur));
+      display:flex;
+      flex-direction:column;
+      overflow: hidden;
     }
 
     #header{ display:none; }
@@ -48,56 +94,159 @@
     h2{ margin:5px 0 0; font-size:14px; color:#888; font-weight:normal; }
 
     #statusLine{
-      margin-top:10px; padding:8px 10px; border:1px solid rgba(102,252,241,0.35);
-      border-radius:6px; background:rgba(31,40,51,0.6);
-      font-size:12px; color:#c5c6c7; line-height:1.4;
+      margin-top:10px;
+      padding:10px 12px;
+      border:1px solid rgba(102,252,241,0.24);
+      border-radius: 14px;
+      background: rgba(0,0,0,0.18);
+      font-size:12px;
+      color: var(--text);
+      line-height:1.45;
+      box-shadow: var(--shadow-soft);
     }
-    .ok{ color:#66fcf1; }
-    .warn{ color:#ffcc80; }
-    .bad{ color:#ff8a80; }
+    .ok{ color: var(--accent); }
+    .warn{ color: #F59E0B; }
+    .bad{ color: #F43F5E; }
 
-    .catalogue-container{ flex:1; overflow-y:auto; padding:10px; }
+    .catalogue-container{ flex:1; overflow-y:auto; padding:12px; }
 
+    /* Category headers: dark glass + thin neon accent (not solid blocks) */
     .category-btn{
-      background:#45a29e; color:white; cursor:pointer; padding:12px; width:100%;
-      text-align:left; border:none; outline:none; transition:0.4s;
-      font-weight:bold; margin-top:5px; border-radius:4px; display:flex; justify-content:space-between;
+      background: rgba(0,0,0,0.18);
+      color: var(--text);
+      cursor:pointer;
+      padding:12px 12px;
+      width:100%;
+      text-align:left;
+      border: 1px solid var(--stroke-2);
+      outline:none;
+      transition: background 180ms ease, border-color 180ms ease, transform 180ms ease, box-shadow 180ms ease;
+      font-weight:900;
+      margin-top:10px;
+      border-radius: 16px;
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      letter-spacing: 0.02em;
     }
-    .category-btn:after{ content:'+'; font-weight:bold; float:right; }
-    .category-btn.active{ background:#66fcf1; color:#0b0c10; }
-    .category-btn.active:after{ content:'-'; }
+    .category-btn:after{
+      content:'▸';
+      font-weight:900;
+      color: rgba(229,231,235,0.85);
+      transform: rotate(0deg);
+      transition: transform 180ms ease, color 180ms ease;
+    }
+    .category-btn:hover{
+      background: rgba(255,255,255,0.05);
+      border-color: rgba(102,252,241,0.22);
+      box-shadow: 0 0 0 1px rgba(102,252,241,0.10), 0 16px 34px rgba(0,0,0,0.35);
+      transform: translateY(-1px);
+    }
+    .category-btn.active{
+      border-left: 3px solid var(--accent);
+      border-color: rgba(102,252,241,0.28);
+      background: rgba(102,252,241,0.06);
+      color: rgba(234,255,253,0.98);
+    }
+    .category-btn.active:after{ transform: rotate(90deg); color: var(--accent); }
 
     .analysis-btn{
-      background:#1f4068; border:1px solid #66fcf1; color:#66fcf1;
-      margin-top:15px; text-align:center; justify-content:center; transition:0.3s;
+      background: rgba(102,252,241,0.08);
+      border: 1px solid rgba(102,252,241,0.45);
+      color: rgba(102,252,241,0.95);
+      margin-top:14px;
+      text-align:center;
+      justify-content:center;
+      transition: 180ms ease;
     }
-    .analysis-btn:hover{ background:#66fcf1; color:#0b0c10; cursor:pointer; }
+    .analysis-btn:hover{ background: rgba(102,252,241,0.14); border-color: rgba(102,252,241,0.75); color:#eafffd; cursor:pointer; }
     .analysis-btn:after{ content:''; }
 
     .layer-panel{
-      padding:0 10px; background:#28303b; max-height:0; overflow:hidden;
-      transition:max-height 0.2s ease-out; margin-bottom:5px; border-radius:0 0 4px 4px;
+      padding: 6px 12px 10px 12px;
+      background: var(--bg-slate-2);
+      max-height:0;
+      overflow:hidden;
+      transition: max-height 420ms ease;
+      margin: 6px 0 2px;
+      border-radius: 14px;
+      border: 1px solid rgba(255,255,255,0.06);
+      box-shadow: 0 10px 22px rgba(0,0,0,0.28);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
     }
 
     .layer-item{
-      display:flex; align-items:center; justify-content:space-between;
-      padding:12px 0; border-bottom:1px solid #333; font-size:13px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      padding: 12px 2px;
+      border-bottom:1px solid rgba(255,255,255,0.06);
+      font-size:13px;
+      gap: 10px;
+    }
+    .layer-item:hover{
+      background: rgba(255,255,255,0.04);
+      border-radius: 12px;
+      padding-left: 10px;
+      padding-right: 10px;
+      margin-left: -10px;
+      margin-right: -10px;
     }
     .layer-info{ display:flex; align-items:center; gap:10px; }
 
     .icon-box{ width:12px; height:12px; border:1px solid #fff; display:inline-block; }
     .icon-line{ width:20px; height:3px; display:inline-block; }
     .icon-dot{ width:10px; height:10px; border-radius:50%; display:inline-block; }
-    input[type=checkbox]{ transform:scale(1.2); cursor:pointer; accent-color:#66fcf1; }
+    /* Kill native checkboxes → sleek neon toggle switches */
+    input[type=checkbox]{
+      -webkit-appearance: none;
+      appearance: none;
+      width: 44px;
+      height: 24px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.12);
+      border: 1px solid rgba(255,255,255,0.18);
+      position: relative;
+      cursor: pointer;
+      transition: background-color 200ms ease, border-color 200ms ease, box-shadow 200ms ease;
+      flex: 0 0 auto;
+      outline: none;
+    }
+    input[type=checkbox]::before{
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 3px;
+      width: 18px;
+      height: 18px;
+      border-radius: 999px;
+      transform: translateY(-50%);
+      background: rgba(255,255,255,0.96);
+      box-shadow: 0 6px 16px rgba(0,0,0,0.35);
+      transition: left 220ms ease;
+    }
+    input[type=checkbox]:checked{
+      background: rgba(102,252,241,0.65);
+      border-color: rgba(102,252,241,0.85);
+      box-shadow: 0 0 0 1px rgba(102,252,241,0.20), 0 0 18px rgba(102,252,241,0.22);
+    }
+    input[type=checkbox]:checked::before{ left: 23px; }
+    input[type=checkbox]:focus-visible{
+      box-shadow: 0 0 0 3px rgba(102,252,241,0.22);
+    }
 
     /* ===== Chart panel layout (fixed) ===== */
     #chartPanel{
       height:360px;
-      background:#0b0c10;
-      border-top:2px solid #45a29e;
-      padding:10px;
+      background: rgba(11,14,18,0.82);
+      border-top: 1px solid rgba(102,252,241,0.22);
+      padding:12px;
       display:none;
       position:relative;
+
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
 
       overflow-y:auto;      /* ✅ allow scroll */
       overflow-x:hidden;
@@ -125,14 +274,19 @@
 
     select.dtSelect{
       padding:8px;
-      background:#1f2833;
-      color:white;
-      border:1px solid #45a29e;
-      border-radius:6px;
-      font-weight:bold;
+      background: rgba(15,23,42,0.55);
+      color: rgba(229,231,235,0.92);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 12px;
+      font-weight: 900;
       flex: 1 1 140px;
       min-width:140px;
       max-width:100%;
+    }
+    select.dtSelect:focus{
+      outline: none;
+      border-color: rgba(102,252,241,0.45);
+      box-shadow: 0 0 0 3px rgba(102,252,241,0.12);
     }
 
     #closeChartBtn{
@@ -420,17 +574,60 @@
       display: none !important;
     }
 
-#legendPanel{
-      position:absolute; bottom:90px; right:30px; width:300px;
-      background:rgba(11,12,16,0.85); padding:15px; border-radius:8px;
-      color:white; display:none; z-index:50; border:1px solid #66fcf1;
-      font-family:sans-serif;
+    /* ============================
+       Map legend (polished)
+       ============================ */
+    #legendPanel{
+      position:absolute;
+      bottom:90px;
+      right:30px;
+      width: 240px;
+      background: var(--bg-slate);
+      padding: 12px 12px 10px 12px;
+      border-radius: 16px;
+      color: var(--text);
+      display:none;
+      z-index:50;
+      border: 1px solid rgba(255,255,255,0.10);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(var(--blur));
+      -webkit-backdrop-filter: blur(var(--blur));
+    }
+    #legendTitle{
+      display:block;
+      font-weight: 900;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: rgba(229,231,235,0.92);
+      font-size: 12px;
+    }
+    #legendSubtitle{
+      color: rgba(148,163,184,0.88) !important;
+      margin-top: 6px;
+      margin-bottom: 10px !important;
+    }
+    .legendBody{
+      display:flex;
+      gap: 10px;
+      align-items: stretch;
     }
     .gradient-bar{
-      height:15px; width:100%; margin:8px 0; border-radius:3px;
-      background:linear-gradient(to right, #ccc, #81D4FA, #29B6F6, #0277BD, #0D47A1);
+      width: 12px;
+      height: 120px;
+      border-radius: 999px;
+      background:linear-gradient(to bottom, #ccc, #81D4FA, #29B6F6, #0277BD, #0D47A1);
+      box-shadow: 0 0 0 1px rgba(255,255,255,0.10);
+      flex: 0 0 auto;
     }
-    .legend-labels{ display:flex; justify-content:space-between; font-size:11px; color:#ccc; }
+    .legend-labels{
+      display:flex;
+      flex-direction:column;
+      justify-content:space-between;
+      font-size:11px;
+      color: rgba(229,231,235,0.80);
+      line-height: 1.2;
+      padding: 2px 0;
+    }
 
     /* ============================
        NDVI Legend
@@ -444,14 +641,17 @@
       right:20px;
       min-width:200px;
       max-width:260px;
-      background: rgba(11,12,16,0.85);
-      border: 1px solid rgba(102,252,241,0.45);
-      border-radius: 8px;
-      padding: 10px;
+      background: var(--bg-slate);
+      border: 1px solid rgba(255,255,255,0.10);
+      border-radius: 16px;
+      padding: 10px 12px;
       z-index:60;
-      color:#e6e6e6;
+      color: var(--text);
       font-size:11px;
       display:none;
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(var(--blur));
+      -webkit-backdrop-filter: blur(var(--blur));
     }
     #ndviLegend .ndviLegendTitle{
       font-weight:700;
@@ -476,21 +676,65 @@
       /* space out legend items from the title */
     }
 
+    /* Suitability legend overlay (same visual language as NDVI) */
+    #suitabilityLegend{
+      position:absolute;
+      bottom:90px;
+      right:20px;
+      min-width:220px;
+      max-width:280px;
+      background: var(--bg-slate);
+      border: 1px solid rgba(255,255,255,0.10);
+      border-radius: 16px;
+      padding: 10px 12px;
+      z-index:60;
+      color: var(--text);
+      font-size:11px;
+      display:none;
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(var(--blur));
+      -webkit-backdrop-filter: blur(var(--blur));
+    }
+    #suitabilityLegend .ndviLegendTitle{
+      font-weight:700;
+      margin-bottom:6px;
+      color:#66fcf1;
+      font-size:12px;
+    }
+    #suitabilityLegend .ndviLegendItem{
+      display:flex;
+      align-items:center;
+      margin-bottom:4px;
+    }
+    #suitabilityLegend .ndviSwatch{
+      width:14px;
+      height:14px;
+      border-radius:3px;
+      margin-right:8px;
+      flex:0 0 auto;
+      border: 1px solid rgba(255,255,255,0.14);
+    }
+    #suitabilityLegend .ndviLegendContent {}
+
     /* ===== Right-side asset details panel ===== */
+    /* Right-side asset panel — match the floating glass theme (like the left sidebar)
+       Keeps logic intact (same width variable), but visually becomes a premium card. */
     #assetPanel{
       position: fixed;
-      top: var(--topbar-h);
-      right: 0;
+      top: calc(var(--topbar-h) + 16px);
+      right: 16px;
       width: var(--assetpanel-w);
-      height: calc(100vh - var(--topbar-h));
-      background: rgba(11,12,16,0.96);
-      border-left: 1px solid rgba(102,252,241,0.35);
-      box-shadow: -10px 0 28px rgba(0,0,0,0.55);
-      color: #e6e6e6;
+      height: calc(100vh - var(--topbar-h) - 32px);
+      background: var(--bg-slate);
+      border: 1px solid var(--stroke);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow);
+      color: var(--text);
       z-index: 9800;
       display: none;
       overflow: hidden;
-      backdrop-filter: blur(6px);
+      backdrop-filter: blur(var(--blur));
+      -webkit-backdrop-filter: blur(var(--blur));
     }
     #assetPanelHeader{
       display:flex;
@@ -499,7 +743,7 @@
       gap:10px;
       padding:12px 12px 10px 12px;
       border-bottom:1px solid rgba(255,255,255,0.08);
-      background: rgba(31,40,51,0.55);
+      background: rgba(0,0,0,0.18);
     }
     #assetPanelTitle{
       font-weight:800;
@@ -670,6 +914,12 @@
     /* Ensure the full‑view soil moisture chart fills the available modal space. Without
        an explicit size, the canvas may collapse and appear as a black rectangle. */
     #soilChartBig{
+      width: 100% !important;
+      height: 100% !important;
+    }
+
+    /* Ensure the full-view SWAT hydrology chart fills the modal space */
+    #swatChartBig{
       width: 100% !important;
       height: 100% !important;
     }
@@ -977,10 +1227,11 @@
   grid-template-columns: auto 1fr auto;
   align-items: center;
   padding: 0 14px;
-  background: rgba(11,12,16,0.92);
-  border-bottom: 1px solid rgba(102,252,241,0.28);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  background: var(--bg-slate);
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  box-shadow: 0 10px 30px rgba(0,0,0,0.45);
+  backdrop-filter: blur(var(--blur));
+  -webkit-backdrop-filter: blur(var(--blur));
   z-index: 9900;
   overflow: visible; /* allow Cesium basemap dropdown to open */
   gap: 10px;
@@ -1073,13 +1324,15 @@
 
 /* Shift main layout down to make room for the top bar (no other logic changes) */
 #sidebar{
-  top: var(--topbar-h) !important;
-  height: calc(100vh - var(--topbar-h)) !important;
+  /* Floating card: keep a consistent air-gap from the header + edges */
+  top: calc(var(--topbar-h) + 16px) !important;
+  height: calc(100vh - var(--topbar-h) - 32px) !important;
 }
 #cesiumContainer{
   position:absolute !important;
   top: var(--topbar-h) !important;
-  left: 340px !important;
+  /* Map stays full-width; sidebar floats on top */
+  left: 0 !important;
   right: 0 !important;
   bottom: 0 !important;
   width: auto !important;
@@ -1087,18 +1340,22 @@
   margin-left: 0 !important;
 }
 
-/* Reserve space for the right-side details panel when it is open (no overlap with the map). */
+/* Right-side details panel is a floating glass card (like the left sidebar).
+   Keep the map FULL-WIDTH behind it (avoid a black “reserved space” strip). */
 body.hasAssetPanel #cesiumContainer{
-  right: var(--assetpanel-w) !important;
+  right: 0 !important;
 }
 body.hasAssetPanel #legendPanel{
-  right: calc(var(--assetpanel-w) + 30px) !important;
+  right: calc(var(--assetpanel-w) + 46px) !important;
 }
 body.hasAssetPanel #ndviLegend{
-  right: calc(var(--assetpanel-w) + 20px) !important;
+  right: calc(var(--assetpanel-w) + 36px) !important;
+}
+body.hasAssetPanel #suitabilityLegend{
+  right: calc(var(--assetpanel-w) + 36px) !important;
 }
 body.hasAssetPanel .mwInfoTooltip{
-  right: calc(var(--assetpanel-w) + 14px) !important;
+  right: calc(var(--assetpanel-w) + 30px) !important;
 }
 
 
@@ -1491,6 +1748,41 @@ body.hasAssetPanel .mwInfoTooltip{
           <input type="checkbox" onchange="toggleLayer('sites', this.checked)">
         </div>
 
+        <!-- Suitability analysis group with expandable sublayers -->
+        <div id="suitabilityMain" class="ndvi-main" onclick="toggleSuitabilityPanel()">
+          <span>Suitability Analysis</span>
+        </div>
+        <div id="suitabilityPanel" class="ndvi-panel">
+          <div class="layer-item">
+            <div class="layer-info" style="display:flex; align-items:center; font-size:13px;">
+              <span>Marab Suitability <span style="color:#9aa;">(barley)</span></span>
+              <span class="info-icon" onclick="ndviInfoClick(event, 'info-suitability-marab')">&#8505;</span>
+            </div>
+            <input id="suitabilityMarabChk" type="checkbox" onchange="setSuitabilityMode('marab', this.checked)">
+          </div>
+          <div id="info-suitability-marab" class="info-content">
+            <div><b>Marab suitability</b>: suitability for downstream Marab rainwater harvesting combined with barley.</div>
+            <div>Warm colors indicate lower suitability and green shades indicate higher suitability. Class range: 40.34–94.93%.</div>
+          </div>
+
+          <div class="layer-item">
+            <div class="layer-info" style="display:flex; align-items:center; font-size:13px;">
+              <span>Vallerani Suitability <span style="color:#9aa;">(saltbush)</span></span>
+              <span class="info-icon" onclick="ndviInfoClick(event, 'info-suitability-vallerani')">&#8505;</span>
+            </div>
+            <input id="suitabilityValleraniChk" type="checkbox" onchange="setSuitabilityMode('vallerani', this.checked)">
+          </div>
+          <div id="info-suitability-vallerani" class="info-content">
+            <div><b>Vallerani suitability</b>: suitability for hillslope micro-catchments combined with saltbush restoration.</div>
+            <div>Warm colors indicate lower suitability and green shades indicate higher suitability. Class range: 47.08–98.29%.</div>
+          </div>
+
+          <div style="margin-top:8px; font-size:12px; color:#9aa; line-height:1.3;">
+            <b>Suitability value meaning</b>: red/orange = lower suitability • yellow = moderate • green/dark green = high to very high suitability.<br/>
+            <span style="font-size:11px;color:#777;">Only one suitability overlay is shown at a time.</span>
+          </div>
+        </div>
+
         <!-- NDVI group with expandable sublayers -->
         <div id="ndviMain" class="ndvi-main" onclick="toggleNdviPanel()">
           <span>NDVI</span>
@@ -1555,7 +1847,7 @@ body.hasAssetPanel .mwInfoTooltip{
         <div class="layer-item">
           <div class="layer-info">
             <div class="icon-box" style="background:#888;"></div>
-            LoD1 Buildings
+            Buildings (LoD1 Extrusion)
           </div>
           <input id="buildingsChk" type="checkbox" onchange="toggleLayer('buildings', this.checked)">
         </div>
@@ -1606,7 +1898,7 @@ body.hasAssetPanel .mwInfoTooltip{
 
       <div id="hydrologyTab" class="chartTabPane">
         <div id="hydrologyNotice">Hydrology scenarios are available only for the SWAT (71) sub-basin layer.</div>
-        
+
         <div id="subInfoLine" style="margin:8px 0 10px; font-size:12px; color:#c5c6c7; line-height:1.35;">
           Click a sub-basin to view details.
         </div>
@@ -1618,7 +1910,12 @@ body.hasAssetPanel .mwInfoTooltip{
             <span class="climatePill" id="kpiRecharge">Recharge: —</span>
           </div>
         </div>
-<canvas id="swatChart"></canvas>
+        <div id="swatChartActions" style="display:flex; justify-content:flex-end; margin:0 0 8px;">
+          <button id="swatExpandBtn" class="miniActionBtn" type="button" title="Expand / Full view">⤢ Full view</button>
+        </div>
+        <div id="swatChartWrap">
+          <canvas id="swatChart"></canvas>
+        </div>
         <div id="rankPanel" style="display:none; margin-top:10px;">
           <div class="assetSectionTitle" style="margin:10px 0 8px;">Top changes (selected metric)</div>
           <div style="display:flex; gap:10px; flex-wrap:wrap;">
@@ -1769,9 +2066,11 @@ body.hasAssetPanel .mwInfoTooltip{
   <div id="legendPanel">
     <strong id="legendTitle">Map</strong>
     <div id="legendSubtitle" style="font-size: 11px; color:#aaa; margin-bottom:5px;">—</div>
-    <div class="gradient-bar" id="legendGradient"></div>
-    <div class="legend-labels" id="legendLabels">
-      <span>Low</span><span>Avg</span><span>High</span>
+    <div class="legendBody">
+      <div class="gradient-bar" id="legendGradient"></div>
+      <div class="legend-labels" id="legendLabels">
+        <span>Low</span><span>Avg</span><span>High</span>
+      </div>
     </div>
   </div>
 
@@ -1781,6 +2080,11 @@ body.hasAssetPanel .mwInfoTooltip{
        positioning so as not to overlap the assistant toggle. -->
   <div id="ndviLegend">
     <div class="ndviLegendTitle">NDVI legend</div>
+    <div class="ndviLegendContent"></div>
+  </div>
+
+  <div id="suitabilityLegend">
+    <div class="ndviLegendTitle">Suitability legend</div>
     <div class="ndviLegendContent"></div>
   </div>
 
@@ -1826,6 +2130,22 @@ body.hasAssetPanel .mwInfoTooltip{
       <canvas id="soilChartBig"></canvas>
     </div>
     <div class="modalHint">Tip: scroll / pinch to zoom, drag to pan (x‑axis)</div>
+  </div>
+</div>
+
+<!-- Full view modal for the SWAT (Hydrology) chart -->
+<div id="swatModal" class="modalOverlay" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="swatModalTitle">
+  <div class="modalCard" role="document">
+    <div class="modalHeader">
+      <div id="swatModalTitle" class="modalTitle">SWAT hydrology — Full view</div>
+      <div class="modalActions">
+        <button id="swatModalClose" class="miniActionBtn" type="button" title="Close">✕</button>
+      </div>
+    </div>
+    <div class="modalBody">
+      <canvas id="swatChartBig"></canvas>
+    </div>
+    <div class="modalHint">Tip: scroll / pinch to zoom, drag to pan (x-axis)</div>
   </div>
 </div>
 
@@ -1902,6 +2222,17 @@ body.hasAssetPanel .mwInfoTooltip{
 
 
 <script>
+  // ============================
+  // Premium chart typography (style only)
+  // ============================
+  try {
+    if (window.Chart && window.Chart.defaults) {
+      window.Chart.defaults.font.family = "'JetBrains Mono','Inter',ui-sans-serif,system-ui";
+      window.Chart.defaults.font.size = 11;
+      window.Chart.defaults.color = "rgba(229,231,235,0.82)";
+    }
+  } catch (_) {}
+
   // ============================
   // Configuration for tokens and asset identifiers
   // ============================
@@ -2198,7 +2529,18 @@ const NDVI_COLOR_PNG = {
     delta:    'NDVI_CESIUM_PREVIEW_4326/s2_delta_color.png'
   };
 
-
+  // Suitability overlays (Cesium-ready EPSG:4326 PNGs generated from the cleaned suitability TIFFs)
+  // Keep these files next to the HTML in: Suitability/SUITABILITY_CESIUM_4326/
+  const SUITABILITY_PNG = {
+    marab: 'Suitability/SUITABILITY_CESIUM_4326/marab_suitability_color_4326.png',
+    vallerani: 'Suitability/SUITABILITY_CESIUM_4326/vallerani_suitability_color_4326.png'
+  };
+  const SUITABILITY_EXTENT = {
+    west: 35.561814748331194,
+    south: 30.63966906557778,
+    east: 36.56625284778243,
+    north: 31.923214524898427
+  };
 
   // Dam English name overrides (Arabic -> English)
   const DAM_EN_NAME_OVERRIDE = {
@@ -2234,6 +2576,7 @@ const NDVI_COLOR_PNG = {
 
   // NDVI legend overlay (custom for NDVI overlays)
   const ndviLegend = document.getElementById('ndviLegend');
+  const suitabilityLegend = document.getElementById('suitabilityLegend');
 
   // ============================
   // RIGHT-SIDE ASSET PANEL (Flood Stations + Dams)
@@ -2593,6 +2936,19 @@ function renderBuildingPanel(entity){
   // CESIUM VIEWER
   // ============================
   Cesium.Ion.defaultAccessToken = YOUR_ACCESS_TOKEN;
+  // Suppress a common Chrome-extension promise warning that can appear on local HTML files.
+  // (This is not a dashboard bug; it comes from external browser extensions.)
+  window.addEventListener('unhandledrejection', (event) => {
+    try {
+      const msg = String(event.reason && (event.reason.message || event.reason));
+      if (msg.includes('A listener indicated an asynchronous response') &&
+          msg.includes('message channel closed')) {
+        event.preventDefault();
+        console.warn('Suppressed extension async listener warning:', msg);
+      }
+    } catch (_) {}
+  });
+
 
   const viewer = new Cesium.Viewer('cesiumContainer', {
     // Show the base layer picker so that users can switch between imagery layers (e.g. ArcGIS, OSM)
@@ -2806,6 +3162,121 @@ function renderBuildingPanel(entity){
     }
   }
 
+  // ============================
+  // Suitability overlay (transparent PNGs)
+  // ============================
+  const suitabilityUI = { activeMode: null };
+  const suitabilityOverlayLayers = { marab: null, vallerani: null };
+
+  function clearNdviMode(skipCheckboxUpdate = false) {
+    ndviUI.activeMode = null;
+    hideNdviTooltip();
+    if (!skipCheckboxUpdate) {
+      const b = document.getElementById('ndviBaselineChk');
+      const r = document.getElementById('ndviRecentChk');
+      const d = document.getElementById('ndviDeltaChk');
+      if (b) b.checked = false;
+      if (r) r.checked = false;
+      if (d) d.checked = false;
+    }
+    updateNdviOverlay();
+  }
+
+  function clearSuitabilityMode(skipCheckboxUpdate = false) {
+    suitabilityUI.activeMode = null;
+    if (!skipCheckboxUpdate) {
+      const m = document.getElementById('suitabilityMarabChk');
+      const v = document.getElementById('suitabilityValleraniChk');
+      if (m) m.checked = false;
+      if (v) v.checked = false;
+    }
+    updateSuitabilityOverlay();
+  }
+
+  async function getSuitabilityOverlayLayer(mode) {
+    if (!mode) return null;
+    if (suitabilityOverlayLayers[mode]) return suitabilityOverlayLayers[mode];
+
+    const rect = Cesium.Rectangle.fromDegrees(
+      SUITABILITY_EXTENT.west,
+      SUITABILITY_EXTENT.south,
+      SUITABILITY_EXTENT.east,
+      SUITABILITY_EXTENT.north
+    );
+
+    const provider = new Cesium.SingleTileImageryProvider({
+      url: SUITABILITY_PNG[mode],
+      rectangle: rect,
+      credit: ''
+    });
+
+    const layer = viewer.imageryLayers.addImageryProvider(provider);
+    layer.show = false;
+    layer.alpha = 1.0;
+    suitabilityOverlayLayers[mode] = layer;
+    return layer;
+  }
+
+  async function updateSuitabilityOverlay() {
+    ['marab','vallerani'].forEach(m => {
+      const lyr = suitabilityOverlayLayers[m];
+      if (lyr) lyr.show = false;
+    });
+
+    const mode = suitabilityUI.activeMode;
+    if (!mode) {
+      try { if (suitabilityLegend) suitabilityLegend.style.display = 'none'; } catch(_) {}
+      return;
+    }
+
+    const layer = await getSuitabilityOverlayLayer(mode);
+    if (layer) layer.show = true;
+
+    if (suitabilityLegend) {
+      const contentEl = suitabilityLegend.querySelector('.ndviLegendContent');
+      const titleEl = suitabilityLegend.querySelector('.ndviLegendTitle');
+      let html = '';
+      const colors = ['#F44316','#F98A00','#F2CD00','#B7D300','#6EAA00','#005A0A'];
+      if (mode === 'marab') {
+        if (titleEl) titleEl.textContent = 'Marab suitability';
+        const labels = ['40.34–50','50–60','60–70','70–80','80–90','90–94.93'];
+        labels.forEach((label, i) => {
+          html += `<div class="ndviLegendItem"><span class="ndviSwatch" style="background:${colors[i]};"></span><span>${label}</span></div>`;
+        });
+        html += '<div style="margin-top:6px; color:#b9c6cc; line-height:1.35;">Lower values = less suitable for Marab + barley. Higher values = more suitable.</div>';
+      } else {
+        if (titleEl) titleEl.textContent = 'Vallerani suitability';
+        const labels = ['47.08–50','50–60','60–70','70–80','80–90','90–98.29'];
+        labels.forEach((label, i) => {
+          html += `<div class="ndviLegendItem"><span class="ndviSwatch" style="background:${colors[i]};"></span><span>${label}</span></div>`;
+        });
+        html += '<div style="margin-top:6px; color:#b9c6cc; line-height:1.35;">Lower values = less suitable for Vallerani + saltbush. Higher values = more suitable.</div>';
+      }
+      if (contentEl) contentEl.innerHTML = html;
+      suitabilityLegend.style.display = 'block';
+    }
+  }
+
+  function setSuitabilityMode(mode, checked) {
+    const m = document.getElementById('suitabilityMarabChk');
+    const v = document.getElementById('suitabilityValleraniChk');
+
+    if (!checked) {
+      if (suitabilityUI.activeMode === mode) {
+        clearSuitabilityMode(true);
+      }
+      return;
+    }
+
+    if (m && mode !== 'marab') m.checked = false;
+    if (v && mode !== 'vallerani') v.checked = false;
+
+    if (ndviUI.activeMode) clearNdviMode();
+
+    suitabilityUI.activeMode = mode;
+    updateSuitabilityOverlay();
+  }
+
   const ndviTooltip = document.getElementById('ndviTooltip');
   const ndviTitleEl = document.getElementById('ndviTitle');
   const ndviValEl   = document.getElementById('ndviVal');
@@ -3010,6 +3481,8 @@ function renderBuildingPanel(entity){
     if (r && mode !== 'recent')   r.checked = false;
     if (d && mode !== 'delta')    d.checked = false;
 
+    if (suitabilityUI.activeMode) clearSuitabilityMode();
+
     ndviUI.activeMode = mode;
 
     // Preload the dataset to make clicks smooth
@@ -3025,18 +3498,15 @@ function renderBuildingPanel(entity){
   // UI helpers for NDVI panel toggling
   // ============================
   
-function toggleNdviPanel() {
-    const main = document.getElementById('ndviMain');
-    const panel = document.getElementById('ndviPanel');
+function toggleExpandablePanel(mainId, panelId) {
+    const main = document.getElementById(mainId);
+    const panel = document.getElementById(panelId);
     if (!main || !panel) return;
 
-    // Match CSS timing used in .ndvi-panel for a smooth, readable expand
-    const NDVI_TRANSITION_MS = 650;
-
+    const PANEL_TRANSITION_MS = 650;
     const layerPanel = main.closest('.layer-panel');
     const isOpen = main.classList.contains('active');
 
-    // Helper: keep the Ecosystems panel tall enough so NDVI content is not clipped.
     const syncParentHeight = () => {
       if (layerPanel && layerPanel.style.maxHeight) {
         layerPanel.style.maxHeight = layerPanel.scrollHeight + 'px';
@@ -3044,44 +3514,40 @@ function toggleNdviPanel() {
     };
 
     if (isOpen) {
-      // Close (collapse)
       main.classList.remove('active');
-
-      // If panel was in "auto" mode (maxHeight none), lock it to current height first
       if (panel.style.maxHeight === 'none' || panel.style.maxHeight === '') {
         panel.style.maxHeight = panel.scrollHeight + 'px';
       }
-      // Force reflow so the browser registers the starting height
       void panel.offsetHeight;
-
       panel.classList.remove('open');
       panel.style.maxHeight = '0px';
-
-      // Re-sync parent after the collapse animation finishes
-      setTimeout(syncParentHeight, NDVI_TRANSITION_MS + 20);
+      setTimeout(syncParentHeight, PANEL_TRANSITION_MS + 20);
       return;
     }
 
-    // Open (expand)
     main.classList.add('active');
     panel.classList.add('open');
-
-    // Start from 0 and expand on next frame
     panel.style.maxHeight = '0px';
     requestAnimationFrame(() => {
       panel.style.maxHeight = panel.scrollHeight + 'px';
       syncParentHeight();
     });
 
-    // After expansion, allow natural height so the panel stays open and readable
     const onEnd = (e) => {
       if (e.propertyName !== 'max-height') return;
       panel.removeEventListener('transitionend', onEnd);
-      // "none" prevents clipping if the user expands info boxes inside the NDVI panel
       panel.style.maxHeight = 'none';
       syncParentHeight();
     };
     panel.addEventListener('transitionend', onEnd);
+  }
+
+  function toggleNdviPanel() {
+    toggleExpandablePanel('ndviMain', 'ndviPanel');
+  }
+
+  function toggleSuitabilityPanel() {
+    toggleExpandablePanel('suitabilityMain', 'suitabilityPanel');
   }
 
   function toggleInfo(id) {
@@ -3354,17 +3820,17 @@ function toggleNdviPanel() {
   }
 
   const RAMP = {
-    runoff:      { lo: Cesium.Color.LIGHTBLUE.withAlpha(0.60), hi: Cesium.Color.NAVY.withAlpha(0.85), legend: "linear-gradient(to right,#ccc,#81D4FA,#29B6F6,#0277BD,#0D47A1)" },
-    sediment:    { lo: Cesium.Color.MISTYROSE.withAlpha(0.60), hi: Cesium.Color.DARKRED.withAlpha(0.85), legend: "linear-gradient(to right,#fee,#fbb,#f66,#c00,#6b0000)" },
-    groundwater: { lo: Cesium.Color.LIGHTCYAN.withAlpha(0.60), hi: Cesium.Color.DARKSLATEBLUE.withAlpha(0.85), legend: "linear-gradient(to right,#e0ffff,#9be7ff,#4db6ff,#1565c0,#0d2a6b)" },
-    vegetation:  { lo: Cesium.Color.PALEGREEN.withAlpha(0.55), hi: Cesium.Color.DARKGREEN.withAlpha(0.85), legend: "linear-gradient(to right,#e8f5e9,#a5d6a7,#66bb6a,#2e7d32,#0b3d18)" },
+    runoff:      { lo: Cesium.Color.LIGHTBLUE.withAlpha(0.60), hi: Cesium.Color.NAVY.withAlpha(0.85), legend: "linear-gradient(to bottom,#ccc,#81D4FA,#29B6F6,#0277BD,#0D47A1)" },
+    sediment:    { lo: Cesium.Color.MISTYROSE.withAlpha(0.60), hi: Cesium.Color.DARKRED.withAlpha(0.85), legend: "linear-gradient(to bottom,#fee,#fbb,#f66,#c00,#6b0000)" },
+    groundwater: { lo: Cesium.Color.LIGHTCYAN.withAlpha(0.60), hi: Cesium.Color.DARKSLATEBLUE.withAlpha(0.85), legend: "linear-gradient(to bottom,#e0ffff,#9be7ff,#4db6ff,#1565c0,#0d2a6b)" },
+    vegetation:  { lo: Cesium.Color.PALEGREEN.withAlpha(0.55), hi: Cesium.Color.DARKGREEN.withAlpha(0.85), legend: "linear-gradient(to bottom,#e8f5e9,#a5d6a7,#66bb6a,#2e7d32,#0b3d18)" },
   };
 
   const DELTA = {
     neg: Cesium.Color.DARKRED.withAlpha(0.80),
     mid: Cesium.Color.WHITE.withAlpha(0.20),
     pos: Cesium.Color.DARKGREEN.withAlpha(0.80),
-    legend: "linear-gradient(to right,#6b0000,#ff6b6b,#ffffff,#7ee081,#0b3d18)"
+    legend: "linear-gradient(to bottom,#6b0000,#ff6b6b,#ffffff,#7ee081,#0b3d18)"
   };
 
   function metricLabel(metric){
@@ -3407,7 +3873,7 @@ function toggleNdviPanel() {
       legendPanel.style.display = "block";
       legendTitle.textContent = "Decision Map";
       legendSubtitle.textContent = "Available only for SWAT 71 sub-basins";
-      legendGradient.style.background = "linear-gradient(to right,#777,#777)";
+      legendGradient.style.background = "linear-gradient(to bottom,#777,#777)";
       legendLabels.innerHTML = `<span>N/A</span>`;
       return;
     }
@@ -3418,7 +3884,7 @@ function toggleNdviPanel() {
     legendPanel.style.display = "block";
     legendTitle.textContent = "Decision Map (Best Focus)";
     legendSubtitle.textContent = `Scenario: ${scenarioName} | What-if: ${whatifLabel}`;
-    legendGradient.style.background = "linear-gradient(to right,#ff9800,#9c27b0,#2196f3,#b71c1c)";
+    legendGradient.style.background = "linear-gradient(to bottom,#ff9800,#9c27b0,#2196f3,#b71c1c)";
     legendLabels.innerHTML = `<span>Marab</span><span>Vallerani</span><span>Recharge/Erosion</span>`;
 
     const entities = a.ds.entities.values;
@@ -3694,6 +4160,9 @@ function toggleNdviPanel() {
     // Do not lazy-load a layer when simply hiding it.
     if (!isVisible) {
       if (layers[targetId]) layers[targetId].show = false;
+      if (targetId === 'suitabilityMarab' || targetId === 'suitabilityVallerani') {
+        try { if (suitabilityLegend) suitabilityLegend.style.display = 'none'; } catch(_) {}
+      }
       return;
     }
 
@@ -3708,6 +4177,8 @@ function toggleNdviPanel() {
       else if (targetId === 'allSubbasins') await loadAllSubbasinsLayer();
       else if (targetId === 'buildings') await loadBuildingsLayer();
       else if (targetId === 'floodStations') await loadFloodStationsLayer();
+      else if (targetId === 'suitabilityMarab') { await getSuitabilityOverlayLayer('marab'); layers[targetId] = suitabilityOverlayLayers.marab; }
+      else if (targetId === 'suitabilityVallerani') { await getSuitabilityOverlayLayer('vallerani'); layers[targetId] = suitabilityOverlayLayers.vallerani; }
     }
 
     if (layers[targetId]) layers[targetId].show = true;
@@ -4353,7 +4824,9 @@ try {
             color: Cesium.Color.RED.withAlpha(0.9),
             outlineColor: Cesium.Color.BLACK,
             outlineWidth: 2,
-            heightReference: Cesium.HeightReference.CLAMP_TO_GROUND
+            heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+            // Ensure points stay perfectly visible when zooming in (avoid terrain/geometry occlusion)
+            disableDepthTestDistance: Number.POSITIVE_INFINITY
           };
         }
 
@@ -4417,7 +4890,8 @@ async function loadDamsLayer() {
           color: DAM_FILL.withAlpha(1.0),
           outlineColor: DAM_OUTLINE.withAlpha(1.0),
           outlineWidth: 0,
-          heightReference: Cesium.HeightReference.CLAMP_TO_GROUND
+          heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+          disableDepthTestDistance: Number.POSITIVE_INFINITY
         };
       }
 
@@ -4534,7 +5008,9 @@ async function loadDamsLayer() {
             color: Cesium.Color.GOLD.withAlpha(0.95),
             outlineColor: Cesium.Color.BLACK.withAlpha(0.85),
             outlineWidth: 2,
-            heightReference: Cesium.HeightReference.CLAMP_TO_GROUND
+            heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+            // Keep points round & visible at all zoom levels
+            disableDepthTestDistance: Number.POSITIVE_INFINITY
           };
         }
 
@@ -4756,6 +5232,53 @@ async function loadDamsLayer() {
       }
       await __warmTerrain();
 
+
+      // Extra step to minimize "floating": wait briefly for terrain tiles to finish refining
+      // (especially important right after switching terrain providers or zooming).
+      async function __waitTerrainTilesQuiet(timeoutMs = 4000) {
+        try {
+          const globe = viewer && viewer.scene && viewer.scene.globe;
+          if (!globe || !globe.tileLoadProgressEvent) return;
+          await new Promise(resolve => {
+            let quietFrames = 0;
+            const evt = globe.tileLoadProgressEvent;
+            const cb = (remaining) => {
+              if (remaining === 0) {
+                quietFrames += 1;
+                // Require a couple consecutive "0" events to avoid false positives
+                if (quietFrames >= 2) {
+                  evt.removeEventListener(cb);
+                  resolve();
+                }
+              } else {
+                quietFrames = 0;
+              }
+            };
+            evt.addEventListener(cb);
+            setTimeout(() => {
+              try { evt.removeEventListener(cb); } catch (_) {}
+              resolve();
+            }, timeoutMs);
+          });
+          try { viewer.scene.requestRender(); } catch (_) {}
+          // Give one frame for Cesium to apply the refined terrain to ground clamping
+          await new Promise(r => requestAnimationFrame(r));
+        } catch (e) {
+          console.warn("Terrain tile quiet-wait skipped:", e);
+        }
+      }
+
+      // Temporary terrain refinement boost while clamping/extruding many buildings
+      const __prevSSE = (viewer && viewer.scene && viewer.scene.globe) ? viewer.scene.globe.maximumScreenSpaceError : undefined;
+      try {
+        if (viewer && viewer.scene && viewer.scene.globe && Number.isFinite(__prevSSE)) {
+          viewer.scene.globe.maximumScreenSpaceError = Math.min(__prevSSE, 1.5);
+        }
+      } catch (_) {}
+
+      await __waitTerrainTilesQuiet(4500);
+
+
       // Load the GeoJSON (entities) without clamp at load; we clamp/extrude explicitly below.
       const ds = await Cesium.GeoJsonDataSource.load(raw, { clampToGround: false });
       const entities = ds.entities.values;
@@ -4813,13 +5336,35 @@ async function loadDamsLayer() {
 
         if (!Number.isFinite(h)) { h = 10; hSrc = "default (10m)"; }
 
+        // Height sanity filter (protects against -999 no-data flags and extreme outliers)
+        // - If height <= 0 or equals -999, ignore and use default 10m
+        // - If height is unrealistically tall for this region, clamp to 80m
+        if (!Number.isFinite(h) || h === -999 || h <= 0) {
+          h = 10;
+          hSrc = "default (10m)";
+        } else {
+          // Minimum visible/realistic LoD1 height:
+          // very small values (<2.5m) are treated as noise and lifted to a typical 1-storey height.
+          if (h < 2.5) {
+            h = 3;
+            hSrc = (hSrc ? `${hSrc} (min 3m)` : "min (3m)");
+          }
+          // Clamp extreme outliers
+          if (h > 80) {
+            h = 80;
+            hSrc = (hSrc ? `${hSrc} (clamped to 80m)` : "clamped (80m)");
+          }
+        }
+
         // NOTE: The previous version flattened polygon hierarchies by converting every vertex.
         // That is very expensive for large datasets and causes the browser to freeze.
         // LoD1 footprints are already 2D in practice; Cesium will clamp them to terrain via heightReference.
         e.polygon.perPositionHeight = false;
 
-        e.polygon.height = 0.0;
-        e.polygon.heightReference = Cesium.HeightReference.CLAMP_TO_GROUND;
+        // Slight negative sink hides small clamp gaps on steep/low-res terrain
+        const __SINK_M = 0.6;
+        e.polygon.height = -__SINK_M;
+        e.polygon.heightReference = Cesium.HeightReference.RELATIVE_TO_GROUND;
 
         e.polygon.extrudedHeight = h;
         e.polygon.extrudedHeightReference = Cesium.HeightReference.RELATIVE_TO_GROUND;
@@ -4847,6 +5392,16 @@ async function loadDamsLayer() {
       layers["buildings"] = ds;
 
       console.log(`✅ LoD1 buildings loaded: ${entities.length} entities (${extruded} extruded)`);
+
+      // Restore original terrain screen-space-error after initial clamping/extrusion work
+      try {
+        if (Number.isFinite(__prevSSE)) {
+          setTimeout(() => {
+            try { viewer.scene.globe.maximumScreenSpaceError = __prevSSE; } catch (_) {}
+          }, 2500);
+        }
+      } catch (_) {}
+
 
       // Keep depth test enabled (helps reduce "floating" perception over terrain)
       try { viewer.scene.globe.depthTestAgainstTerrain = true; } catch (_) {}
@@ -4912,6 +5467,14 @@ async function loadDamsLayer() {
       } else {
         updateChart(currentSubbasinId);
       }
+
+      // If SWAT full-view modal is open, keep it in sync (UI only)
+      try {
+        const sm = document.getElementById("swatModal");
+        if (sm && sm.style.display && sm.style.display !== "none") {
+          renderSwatModalChart();
+        }
+      } catch(_) {}
     }
     if (heatmapOn) {
       const vm = (document.getElementById("viewModeSelect")?.value) || "absolute";
@@ -6811,7 +7374,88 @@ if (__subLayerOn && (!sub || sub.subbasinId == null)) {
     soilModalChart = null;
   }
 
-  // UI hooks (Option A: click anywhere on the chart to expand)
+  // ============================
+  // SWAT chart: full-view modal (UI only)
+  // ============================
+  let swatModalChart = null;
+
+  function openSwatModal(ev){
+    try { if (ev) { ev.preventDefault(); ev.stopPropagation(); } } catch(_) {}
+
+    const overlay = document.getElementById("swatModal");
+    const bigCanvas = document.getElementById("swatChartBig");
+    if (!overlay || !bigCanvas) return;
+
+    if (!myChart) {
+      alert("SWAT chart is not ready yet. Click a sub-basin first.");
+      return;
+    }
+
+    __registerZoomPluginIfNeeded();
+    overlay.style.display = "flex";
+
+    // Wait one frame so the modal canvas has a real size before Chart.js renders.
+    requestAnimationFrame(() => renderSwatModalChart());
+  }
+
+  function renderSwatModalChart(){
+    const canvas = document.getElementById("swatChartBig");
+    if (!canvas || !window.Chart || !myChart) return;
+
+    const ctx = canvas.getContext("2d");
+    try { if (swatModalChart) swatModalChart.destroy(); } catch(_) {}
+    swatModalChart = null;
+
+    // Deep-clone the current SWAT chart data/options (no changes to analysis).
+    let data;
+    try { data = structuredClone(myChart.data); }
+    catch { data = JSON.parse(JSON.stringify(myChart.data)); }
+
+    let options;
+    try { options = structuredClone(myChart.options); }
+    catch { options = JSON.parse(JSON.stringify(myChart.options)); }
+
+    options = options || {};
+    options.responsive = true;
+    options.maintainAspectRatio = false;
+
+    // Make axes easier to read in the large modal view.
+    if (options.scales?.x?.ticks) {
+      options.scales.x.ticks.maxTicksLimit = 24;
+      options.scales.x.ticks.autoSkip = true;
+      options.scales.x.ticks.font = Object.assign({}, options.scales.x.ticks.font || {}, { size: 12 });
+    }
+    const yScaleKeys = Object.keys(options.scales || {}).filter(k => /^y/i.test(k));
+    yScaleKeys.forEach((k) => {
+      const sc = options.scales[k];
+      if (!sc) return;
+      if (sc.ticks) sc.ticks.font = Object.assign({}, sc.ticks.font || {}, { size: 12 });
+      if (sc.title) sc.title.font = Object.assign({}, sc.title.font || {}, { size: 13, weight: "600" });
+    });
+
+    // Enable pan/zoom in full view (same pattern as climate and soil modals)
+    options.plugins = options.plugins || {};
+    options.plugins.zoom = {
+      pan: { enabled: true, mode: "x" },
+      zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: "x" },
+      limits: { x: { min: "original", max: "original" } }
+    };
+
+    swatModalChart = new Chart(ctx, {
+      type: myChart.config?.type || "line",
+      data,
+      options
+    });
+  }
+
+  function closeSwatModal(){
+    const overlay = document.getElementById("swatModal");
+    if (overlay) overlay.style.display = "none";
+    try { if (swatModalChart) swatModalChart.destroy(); } catch(_) {}
+    swatModalChart = null;
+  }
+
+  // UI hooks (click charts or use Full view buttons to open centered modal charts)
   (function(){
     const c = document.getElementById("climateChart");
     if (c) {
@@ -6821,49 +7465,64 @@ if (__subLayerOn && (!sub || sub.subbasinId == null)) {
     const expandBtn = document.getElementById("climateExpandBtn");
     if (expandBtn) expandBtn.addEventListener("click", openClimateModal);
 
-    const overlay = document.getElementById("climateModal");
-    const closeBtn = document.getElementById("climateModalClose");
-    if (closeBtn) closeBtn.addEventListener("click", closeClimateModal);
-    if (overlay) {
-      overlay.addEventListener("click", function(ev){
-        if (ev.target === overlay) closeClimateModal();
+    const climateOverlay = document.getElementById("climateModal");
+    const climateCloseBtn = document.getElementById("climateModalClose");
+    if (climateCloseBtn) climateCloseBtn.addEventListener("click", closeClimateModal);
+    if (climateOverlay) {
+      climateOverlay.addEventListener("click", function(ev){
+        if (ev.target === climateOverlay) closeClimateModal();
       });
     }
-    document.addEventListener("keydown", function(ev){
-      if (ev.key === "Escape") closeClimateModal();
-    });
+
+    // SWAT (Hydrology) full view
+    const swatCanvas = document.getElementById("swatChart");
+    if (swatCanvas) {
+      swatCanvas.style.cursor = "zoom-in";
+      swatCanvas.addEventListener("click", openSwatModal);
+    }
+    const swatBtn = document.getElementById("swatExpandBtn");
+    if (swatBtn) swatBtn.addEventListener("click", openSwatModal);
+
+    const swatOverlay = document.getElementById("swatModal");
+    const swatCloseBtn = document.getElementById("swatModalClose");
+    if (swatCloseBtn) swatCloseBtn.addEventListener("click", closeSwatModal);
+    if (swatOverlay) {
+      swatOverlay.addEventListener("click", function(ev){
+        if (ev.target === swatOverlay) closeSwatModal();
+      });
+    }
 
     // Soil moisture: toggle between monthly comparison and anomaly views
     const soilToggle = document.getElementById("soilToggleBtn");
     if (soilToggle) {
       soilToggle.addEventListener("click", () => {
         soilMode = (soilMode === 'compare') ? 'anomaly' : 'compare';
-        // Update button label to reflect next action
         soilToggle.textContent = (soilMode === 'compare') ? 'Show Anomaly' : 'Show Monthly Comparison';
-        // Refresh panel immediately if soil tab is visible
         const soilTab = document.getElementById("soilTab");
         if (soilTab && soilTab.style.display !== 'none') {
           showSoilPanel();
         }
       });
-      // Initialise button text according to default mode
       soilToggle.textContent = (soilMode === 'compare') ? 'Show Anomaly' : 'Show Monthly Comparison';
     }
 
-    // Soil zoom button → open full view modal
     const soilZoom = document.getElementById("soilZoomBtn");
-    if (soilZoom) {
-      soilZoom.addEventListener("click", openSoilModal);
-    }
-    // Soil modal close button
+    if (soilZoom) soilZoom.addEventListener("click", openSoilModal);
+
+    const soilOverlay = document.getElementById("soilModal");
     const soilClose = document.getElementById("soilModalClose");
-    if (soilClose) {
-      soilClose.addEventListener("click", closeSoilModal);
+    if (soilClose) soilClose.addEventListener("click", closeSoilModal);
+    if (soilOverlay) {
+      soilOverlay.addEventListener("click", function(ev){
+        if (ev.target === soilOverlay) closeSoilModal();
+      });
     }
 
-    // Close soil modal with Escape key
     document.addEventListener("keydown", function(ev){
-      if (ev.key === "Escape") closeSoilModal();
+      if (ev.key !== "Escape") return;
+      closeClimateModal();
+      closeSoilModal();
+      closeSwatModal();
     });
   })();
 
